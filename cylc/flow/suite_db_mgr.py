@@ -55,7 +55,7 @@ class SuiteDatabaseManager(object):
     KEY_RUN_MODE = 'run_mode'
     KEY_STOP_CLOCK_TIME = 'stop_clock_time'
     KEY_STOP_TASK = 'stop_task'
-    KEY_CYCLE_POINT_TIME_ZONE = 'cp_tz'
+    KEY_CYCLE_POINT_TIME_ZONE = 'cycle_point_tz'
 
     TABLE_BROADCAST_EVENTS = CylcSuiteDAO.TABLE_BROADCAST_EVENTS
     TABLE_BROADCAST_STATES = CylcSuiteDAO.TABLE_BROADCAST_STATES
@@ -304,8 +304,7 @@ class SuiteDatabaseManager(object):
             self.KEY_FINAL_CYCLE_POINT,
             self.KEY_START_CYCLE_POINT,
             self.KEY_STOP_CYCLE_POINT,
-            self.KEY_RUN_MODE,
-            self.KEY_CYCLE_POINT_TIME_ZONE
+            self.KEY_RUN_MODE
         ):
             value = getattr(schd.options, key, None)
             if value is not None:
@@ -315,7 +314,11 @@ class SuiteDatabaseManager(object):
             self.db_inserts_map[self.TABLE_SUITE_PARAMS].append({
                 "key": self.KEY_NO_AUTO_SHUTDOWN,
                 "value": int(schd.options.no_auto_shutdown)})
-        for key in (self.KEY_STOP_CLOCK_TIME, self.KEY_STOP_TASK):
+        for key in (
+            self.KEY_STOP_CLOCK_TIME,
+            self.KEY_STOP_TASK,
+            self.KEY_CYCLE_POINT_TIME_ZONE
+        ):
             value = getattr(schd, key, None)
             if value is not None:
                 self.db_inserts_map[self.TABLE_SUITE_PARAMS].append({

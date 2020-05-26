@@ -194,6 +194,8 @@ class Scheduler(object):
 
         self.contact_data = None
 
+        self.cycle_point_tz = None
+
         # initialize some items in case of early shutdown
         # (required in the shutdown() method)
         self.state_summary_mgr = None
@@ -474,9 +476,9 @@ see `COPYING' in the Cylc source distribution.
             raise ValueError('this suite requires the %s run mode' % reqmode)
 
         if not self.is_restart:
-            cp_tz_str = self.config.cfg['cylc']['cycle point time zone']
             # Will save suite time zone in database:
-            self.options.cp_tz = cp_tz_str
+            self.cycle_point_tz = (
+                self.config.cfg['cylc']['cycle point time zone'])
 
         self.broadcast_mgr.linearized_ancestors.update(
             self.config.get_linearized_ancestors())
@@ -1148,6 +1150,7 @@ see `COPYING' in the Cylc source distribution.
             self.options,
             self.template_vars,
             is_reload=is_reload,
+            cycle_point_tz=self.cycle_point_tz,
             xtrigger_mgr=self.xtrigger_mgr,
             mem_log_func=self.profiler.log_memory,
             output_fname=os.path.join(
@@ -1270,7 +1273,7 @@ see `COPYING' in the Cylc source distribution.
             self.stop_task = value
             LOG.info('+ stop task = %s', value)
         elif key == self.suite_db_mgr.KEY_CYCLE_POINT_TIME_ZONE:
-            self.options.cp_tz = value
+            self.cycle_point_tz = value
             LOG.info('+ cycle point time zone = %s' % value)
 
     def _load_template_vars(self, _, row):
