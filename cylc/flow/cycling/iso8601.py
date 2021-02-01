@@ -18,6 +18,7 @@
 
 from functools import lru_cache
 import re
+from typing import Optional, TYPE_CHECKING, Tuple
 
 from metomi.isodatetime.data import Calendar, Duration, CALENDAR
 from metomi.isodatetime.dumpers import TimePointDumper
@@ -37,6 +38,11 @@ from cylc.flow.exceptions import (
 from cylc.flow.wallclock import get_current_time_string
 from cylc.flow.parsec.validate import IllegalValueError
 
+if TYPE_CHECKING:
+    from metomi.isodatetime.data import TimePoint
+    from metomi.isodatetime.parsers import (
+        DurationParser, TimePointParser, TimeRecurrenceParser)
+
 CYCLER_TYPE_ISO8601 = "iso8601"
 CYCLER_TYPE_SORT_KEY_ISO8601 = "b"
 
@@ -51,14 +57,16 @@ WARNING_PARSE_EXPANDED_YEAR_DIGITS = (
 class SuiteSpecifics:
 
     """Store suite-setup-specific constants and utilities here."""
-    ASSUMED_TIME_ZONE = None
-    DUMP_FORMAT = None
-    NUM_EXPANDED_YEAR_DIGITS = None
-    abbrev_util = None
-    interval_parser = None
-    point_parser = None
-    recurrence_parser = None
-    iso8601_parsers = None
+    ASSUMED_TIME_ZONE: Optional[Tuple[int, int]] = None
+    DUMP_FORMAT: Optional[str] = None
+    NUM_EXPANDED_YEAR_DIGITS: Optional[int] = None
+    abbrev_util: Optional[CylcTimeParser] = None
+    interval_parser: Optional['DurationParser'] = None
+    point_parser: Optional['TimePointParser'] = None
+    recurrence_parser: Optional['TimeRecurrenceParser'] = None
+    iso8601_parsers: Optional[
+        Tuple['DurationParser', 'TimePointParser', 'TimeRecurrenceParser']
+    ] = None
 
 
 class ISO8601Point(PointBase):
@@ -636,15 +644,12 @@ def _get_old_anchor_step_recurrence(anchor, step, start_point):
     return str(anchor_point) + "/" + str(step)
 
 
-def ingest_time(value, now=None):
+def ingest_time(value: str, now: Optional['TimePoint'] = None) -> str:
     """Handle relative, truncated and prev/next cycle points.
 
     Args:
-        value (str):
-            The string containing the prev()/next() stuff.
-        now (metomi.isodatetime.data.TimePoint):
-            A time point to use as the context for resolving the value.
-
+        value: The string containing the prev()/next() stuff.
+        now: A time point to use as the context for resolving the value.
     """
     # remove extraneous whitespace from cycle point
     value = value.replace(" ", "")
@@ -718,20 +723,18 @@ def ingest_time(value, now=None):
     return str(cycle_point)
 
 
-def prev_next(value, now, parser):
+def prev_next(
+        value: str, now: 'TimePoint', parser: 'TimePointParser'
+) -> Tuple['TimePoint', Optional[str]]:
     """Handle prev() and next() syntax.
 
     Args:
-        value (str):
-            The string containing the prev()/next() stuff.
-        now (metomi.isodatetime.data.TimePoint):
-            A time point to use as the context for resolving the value.
-        parser (metomi.isodatetime.parsers.TimePointParser):
-            A time point parser.
+        value: The string containing the prev()/next() stuff.
+        now: A time point to use as the context for resolving the value.
+        parser: A time point parser.
 
     Returns
-        tuple - (cycle_point, offset)
-
+        (cycle point, offset)
     """
     # are we in gregorian mode (or some other eccentric calendar
     if CALENDAR.mode != Calendar.MODE_GREGORIAN:
