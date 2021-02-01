@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from typing import Optional, Tuple, Type
+from typing import Any, Optional, Tuple, Type
 import pytest
 import logging
 from unittest.mock import Mock
@@ -26,6 +26,8 @@ from cylc.flow.cycling import iso8601, loader
 from cylc.flow.exceptions import SuiteConfigError
 from cylc.flow.suite_files import SuiteFiles
 from cylc.flow.wallclock import get_utc_mode, set_utc_mode
+
+Fixture = Any
 
 
 def get_test_inheritance_quotes():
@@ -367,7 +369,7 @@ def test_missing_initial_cycle_point():
 )
 def test_process_icp(scheduling_cfg: dict, expected_icp: Optional[str],
                      expected_err: Optional[Tuple[Type[Exception], str]],
-                     monkeypatch, cycling_mode):
+                     monkeypatch: Fixture, cycling_mode: Fixture):
     """Test SuiteConfig.process_initial_cycle_point().
 
     "now" is assumed to be 2005-01-02T06:15Z
@@ -411,7 +413,7 @@ def test_process_icp(scheduling_cfg: dict, expected_icp: Optional[str],
      (None, '18990501T0000Z')]
 )
 def test_process_startcp(startcp: str, expected: str,
-                         monkeypatch, cycling_mode):
+                         monkeypatch: Fixture, cycling_mode: Fixture):
     """Test SuiteConfig.process_start_cycle_point().
 
     An icp of 1899-05-01T00Z is assumed, and "now" is assumed to be
@@ -578,7 +580,7 @@ def test_process_startcp(startcp: str, expected: str,
 def test_process_fcp(scheduling_cfg: dict, options_fcp: Optional[str],
                      expected_fcp: Optional[str],
                      expected_err: Optional[Tuple[Type[Exception], str]],
-                     cycling_mode):
+                     cycling_mode: Fixture):
     """Test SuiteConfig.process_final_cycle_point().
 
     Params:
