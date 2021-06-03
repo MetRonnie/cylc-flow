@@ -33,6 +33,7 @@ import cylc.flow.flags
 from cylc.flow import __version__ as CYLC_VERSION
 from cylc.flow.option_parsers import verbosity_to_opts
 from cylc.flow.platforms import get_platform, get_host_from_platform
+from cylc.flow.suite_files import SuiteFiles
 
 
 def get_proc_ancestors():
@@ -187,7 +188,8 @@ def construct_rsync_over_ssh_cmd(
     # Note to future devs - be wary of changing the order of the following
     # rsync options, rsync is very particular about order of in/ex-cludes.
 
-    for exclude in ['log', 'share', 'work']:
+    for exclude in (
+            SuiteFiles.LOG_DIR, SuiteFiles.SHARE_DIR, SuiteFiles.WORK_DIR):
         rsync_cmd.append(f"--exclude={exclude}")
     default_includes = [
         '/app/***',

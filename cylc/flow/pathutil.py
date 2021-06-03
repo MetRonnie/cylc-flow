@@ -25,6 +25,7 @@ from cylc.flow import LOG
 from cylc.flow.cfgspec.glbl_cfg import glbl_cfg
 from cylc.flow.exceptions import WorkflowFilesError
 from cylc.flow.platforms import get_localhost_install_target
+from cylc.flow.workflow_files import WorkflowFiles
 
 
 # Note: do not import this elsewhere, as it might bypass unit test
@@ -52,7 +53,9 @@ def get_remote_workflow_run_job_dir(
 ) -> str:
     """Return remote workflow job log directory, joining any extra args,
     NOT expanding vars or user."""
-    return get_remote_workflow_run_dir(flow_name, 'log', 'job', *args)
+    return get_remote_workflow_run_dir(
+        flow_name, WorkflowFiles.LOG_DIR, 'job', *args
+    )
 
 
 def get_workflow_run_dir(
@@ -68,49 +71,57 @@ def get_workflow_run_dir(
 
 def get_workflow_run_job_dir(workflow, *args):
     """Return workflow run job (log) directory, join any extra args."""
-    return get_workflow_run_dir(workflow, 'log', 'job', *args)
+    return get_workflow_run_dir(workflow, WorkflowFiles.LOG_DIR, 'job', *args)
 
 
 def get_workflow_run_log_dir(workflow, *args):
     """Return workflow run log directory, join any extra args."""
-    return get_workflow_run_dir(workflow, 'log', 'workflow', *args)
+    return get_workflow_run_dir(
+        workflow, WorkflowFiles.LOG_DIR, 'workflow', *args
+    )
 
 
 def get_workflow_run_log_name(workflow):
     """Return workflow run log file path."""
-    return get_workflow_run_dir(workflow, 'log', 'workflow', 'log')
+    return get_workflow_run_dir(
+        workflow, WorkflowFiles.LOG_DIR, 'workflow', 'log'
+    )
 
 
 def get_workflow_file_install_log_name(workflow):
     """Return workflow file install log file path."""
     return get_workflow_run_dir(
-        workflow, 'log', 'workflow', 'file-installation-log'
+        workflow, WorkflowFiles.LOG_DIR, 'workflow', 'file-installation-log'
     )
 
 
 def get_workflow_run_config_log_dir(workflow, *args):
     """Return workflow run flow.cylc log directory, join any extra args."""
-    return get_workflow_run_dir(workflow, 'log', 'flow-config', *args)
+    return get_workflow_run_dir(
+        workflow, WorkflowFiles.LOG_DIR, 'flow-config', *args
+    )
 
 
 def get_workflow_run_pub_db_name(workflow):
     """Return workflow run public database file path."""
-    return get_workflow_run_dir(workflow, 'log', 'db')
+    return get_workflow_run_dir(workflow, WorkflowFiles.LOG_DIR, 'db')
 
 
 def get_workflow_run_share_dir(workflow, *args):
     """Return local workflow work/share directory, join any extra args."""
-    return get_workflow_run_dir(workflow, 'share', *args)
+    return get_workflow_run_dir(workflow, WorkflowFiles.SHARE_DIR, *args)
 
 
 def get_workflow_run_work_dir(workflow, *args):
     """Return local workflow work/work directory, join any extra args."""
-    return get_workflow_run_dir(workflow, 'work', *args)
+    return get_workflow_run_dir(workflow, WorkflowFiles.WORK_DIR, *args)
 
 
 def get_workflow_test_log_name(workflow):
     """Return workflow run ref test log file path."""
-    return get_workflow_run_dir(workflow, 'log', 'workflow', 'reftest.log')
+    return get_workflow_run_dir(
+        workflow, WorkflowFiles.LOG_DIR, 'workflow', 'reftest.log'
+    )
 
 
 def make_workflow_run_tree(workflow):
@@ -173,7 +184,8 @@ def get_dirs_to_symlink(install_target, flow_name):
     base_dir = symlink_conf[install_target]['run']
     if base_dir is not None:
         dirs_to_symlink['run'] = os.path.join(base_dir, 'cylc-run', flow_name)
-    for dir_ in ['log', 'share', 'share/cycle', 'work']:
+    for dir_ in (WorkflowFiles.LOG_DIR, WorkflowFiles.SHARE_DIR,
+                 WorkflowFiles.SHARE_CYCLE_DIR, WorkflowFiles.WORK_DIR):
         link = symlink_conf[install_target][dir_]
         if link is None or link == base_dir:
             continue

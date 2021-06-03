@@ -80,7 +80,7 @@ FLOW_FILES = {
     WorkflowFiles.Service.DIRNAME,
     WorkflowFiles.SUITE_RC,   # cylc7 flow definition file name
     WorkflowFiles.FLOW_FILE,  # cylc8 flow definition file name
-    'log'
+    WorkflowFiles.LOG_DIR
 }
 
 EXCLUDE_FILES = {

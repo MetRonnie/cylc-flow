@@ -22,6 +22,7 @@ import sys
 
 from cylc.flow.pathutil import expand_path
 from cylc.flow.rundb import CylcWorkflowDAO
+from cylc.flow.workflow_files import WorkflowFiles
 from cylc.flow.task_state import (
     TASK_STATUS_SUBMITTED,
     TASK_STATUS_RUNNING,
@@ -58,7 +59,8 @@ class CylcWorkflowDBChecker:
 
     def __init__(self, rund, workflow):
         db_path = expand_path(
-            rund, workflow, "log", CylcWorkflowDAO.DB_FILE_BASE_NAME
+            rund, workflow, WorkflowFiles.LOG_DIR,
+            CylcWorkflowDAO.DB_FILE_BASE_NAME
         )
         if not os.path.exists(db_path):
             raise OSError(errno.ENOENT, os.strerror(errno.ENOENT), db_path)

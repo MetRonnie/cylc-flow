@@ -108,7 +108,9 @@ from cylc.flow.wallclock import (
     get_current_time_string,
     get_seconds_as_interval_string,
     get_time_string_from_unix_time as time2str,
-    get_utc_mode)
+    get_utc_mode
+)
+from cylc.flow.workflow_files import WorkflowFiles
 from cylc.flow.xtrigger_mgr import XtriggerManager
 
 
@@ -318,7 +320,8 @@ class Scheduler:
         """
         self.workflow_db_mgr = WorkflowDatabaseManager(
             workflow_files.get_workflow_srv_dir(self.workflow),  # pri_d
-            os.path.join(self.workflow_run_dir, 'log'))  # pub_d
+            os.path.join(self.workflow_run_dir, WorkflowFiles.LOG_DIR)  # pub_d
+        )
         self.data_store_mgr = DataStoreMgr(self)
         self.broadcast_mgr = BroadcastMgr(
             self.workflow_db_mgr, self.data_store_mgr)
