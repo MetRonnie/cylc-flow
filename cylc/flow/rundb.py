@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from os.path import expandvars
 import sqlite3
 import traceback
-from typing import List, Tuple
+from typing import Any, Callable, Iterable, List, Sequence, Tuple
 
 from cylc.flow import LOG
 import cylc.flow.flags
@@ -676,11 +676,16 @@ class CylcWorkflowDAO:
         for row_idx, row in enumerate(self.connect().execute(stmt)):
             callback(row_idx, list(row))
 
-    def select_task_pool_for_restart(self, callback):
+    def select_task_pool_for_restart(
+        self,
+        callback: Callable[
+            [int, Sequence[str], Iterable[Tuple[str, str, str, str]]], Any
+        ]
+    ) -> None:
         """Select from task_pool+task_states+task_jobs for restart.
 
         Invoke callback(row_idx, row) on each row, where each row contains:
-            [cycle, name, is_late, status, is_held, submit_num,
+            [cycle, name, flow_label, is_late, status, is_held, submit_num,
              try_num, platform_name, time_submit, time_run, timeout, outputs]
         """
         form_stmt = r"""
@@ -733,7 +738,9 @@ class CylcWorkflowDAO:
         }
         stmt = form_stmt % form_data
         for row_idx, row in enumerate(self.connect().execute(stmt)):
-            callback(row_idx, list(row))
+            cycle, name = row[:2]
+            prereqs = self.select_task_prerequisites(cycle, name)
+            callback(row_idx, list(row), prereqs)
 
     def select_task_prerequisites(
         self, cycle: str, name: str

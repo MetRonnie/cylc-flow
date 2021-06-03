@@ -55,23 +55,24 @@ def _make_flow(run_dir, test_dir, conf, name=None):
 
 
 @contextmanager
-def _make_scheduler():
+def _make_scheduler(reg: str, **opts: Any):
     """Return a scheduler object for a flow registration."""
-    schd: Scheduler = None  # type: ignore
+    # schd: Scheduler = None  # type: ignore
 
-    def __make_scheduler(reg: str, **opts: Any) -> Scheduler:
-        # This allows paused_start to be overriden:
-        opts = {'paused_start': True, **opts}
-        options = RunOptions(**opts)
-        # create workflow
-        nonlocal schd
-        schd = Scheduler(reg, options)
-        return schd
+    # def __make_scheduler(reg: str, **opts: Any) -> Scheduler:
+    # This allows paused_start to be overriden:
+    opts = {'paused_start': True, **opts}
+    options = RunOptions(**opts)
+    # create workflow
+    # nonlocal schd
+    schd = Scheduler(reg, options)
+    return schd
 
-    yield __make_scheduler
-    # Teardown
-    if hasattr(schd, 'workflow_db_mgr'):
-        schd.workflow_db_mgr.on_workflow_shutdown()
+    # yield __make_scheduler
+    # # Teardown - if a test configures the Scheduler but doesn't run it, then
+    # # there might be ongoing connections to the databases
+    # if hasattr(schd, 'workflow_db_mgr'):
+    #     schd.workflow_db_mgr.on_workflow_shutdown()
 
 
 @asynccontextmanager

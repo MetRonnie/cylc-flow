@@ -167,6 +167,11 @@ class Scheduler:
     message_queue: Queue
     ext_trigger_queue: Queue
 
+    # run options
+    is_restart: bool
+    template_vars: dict
+    options: Values
+
     # configuration
     config: WorkflowConfig  # flow config
     cylc_config: DictTree  # [scheduler] config
@@ -181,11 +186,6 @@ class Scheduler:
     uuid_str: Optional[str] = None
     contact_data: Optional[dict] = None
     bad_hosts: Optional[Set[str]] = None
-
-    # run options
-    is_restart: Optional[bool] = None
-    template_vars: Optional[dict] = None
-    options: Optional[Values] = None
 
     # workflow params
     stop_mode: Optional[StopMode] = None
@@ -237,7 +237,7 @@ class Scheduler:
     time_next_kill: Optional[float] = None
     already_timed_out: bool = False
 
-    def __init__(self, reg, options):
+    def __init__(self, reg: str, options: Values) -> None:
         # flow information
         self.workflow = reg
         self.owner = get_user()
@@ -395,8 +395,7 @@ class Scheduler:
 
         """
         self.profiler.log_memory("scheduler.py: start configure")
-
-        self.is_restart = self.workflow_db_mgr.restart_check()
+        self.is_restart = self.workflow_db_mgr.check_restart()
         # Note: since cylc play replaced cylc run/restart, we wait until this
         # point before setting self.is_restart as we couldn't tell if
         # we're restarting until now.
@@ -417,8 +416,6 @@ class Scheduler:
         self.profiler.log_memory("scheduler.py: before load_flow_file")
         self.load_flow_file()
         self.profiler.log_memory("scheduler.py: after load_flow_file")
-
-        self.workflow_db_mgr.on_workflow_start(self.is_restart)
 
         if not self.is_restart:
             # Set workflow params that would otherwise be loaded from database:
@@ -462,10 +459,6 @@ class Scheduler:
         self.process_cylc_stop_point()
         self.profiler.log_memory("scheduler.py: after load_tasks")
 
-        self.workflow_db_mgr.put_workflow_params(self)
-        self.workflow_db_mgr.put_workflow_template_vars(self.template_vars)
-        self.workflow_db_mgr.put_runtime_inheritance(self.config)
-
         self.already_timed_out = False
         self.set_workflow_timer()
 
@@ -487,13 +480,7 @@ class Scheduler:
             self.options.main_loop
         )
 
-        holdcp = None
-        if self.options.holdcp:
-            holdcp = self.options.holdcp
-        elif self.config.cfg['scheduling']['hold after cycle point']:
-            holdcp = self.config.cfg['scheduling']['hold after cycle point']
-        if holdcp is not None:
-            self.command_set_hold_point(holdcp)
+        self.process_hold_point()
 
         if self.options.paused_start:
             LOG.info("Paused on start up")
@@ -558,6 +545,11 @@ class Scheduler:
 
     async def start_scheduler(self):
         """Start the scheduler main loop."""
+        self.workflow_db_mgr.on_workflow_start()
+        self.workflow_db_mgr.put_workflow_params(self)
+        self.workflow_db_mgr.put_workflow_template_vars(self.template_vars)
+        self.workflow_db_mgr.put_runtime_inheritance(self.config)
+
         try:
             self._configure_contact()
             if self.is_restart:
@@ -662,26 +654,30 @@ class Scheduler:
                 self.pool.add_to_pool(
                     TaskProxy(tdef, point, flow_label))
 
-    def _load_pool_from_db(self):
+    def _load_pool_from_db(self) -> None:
         """Load task pool from DB, for a restart."""
         if self.options.startcp:
             self.config.start_point = TaskID.get_standardised_point(
                 self.options.startcp)
-        self.workflow_db_mgr.pri_dao.select_broadcast_states(
-            self.broadcast_mgr.load_db_broadcast_states)
-        self.workflow_db_mgr.pri_dao.select_task_job_run_times(
-            self._load_task_run_times)
-        self.workflow_db_mgr.pri_dao.select_task_pool_for_restart(
-            self.pool.load_db_task_pool_for_restart)
-        self.workflow_db_mgr.pri_dao.select_jobs_for_restart(
-            self.data_store_mgr.insert_db_job)
-        self.workflow_db_mgr.pri_dao.select_task_action_timers(
-            self.pool.load_db_task_action_timers)
-        self.workflow_db_mgr.pri_dao.select_xtriggers_for_restart(
-            self.xtrigger_mgr.load_xtrigger_for_restart)
-        self.workflow_db_mgr.pri_dao.select_abs_outputs_for_restart(
-            self.pool.load_abs_outputs_for_restart)
-        self.pool.load_db_tasks_to_hold()
+        pri_dao = self.workflow_db_mgr.get_pri_dao()
+        try:
+            pri_dao.select_broadcast_states(
+                self.broadcast_mgr.load_db_broadcast_states)
+            pri_dao.select_task_job_run_times(
+                self._load_task_run_times)
+            pri_dao.select_task_pool_for_restart(
+                self.pool.load_db_task_pool_for_restart)
+            pri_dao.select_jobs_for_restart(
+                self.data_store_mgr.insert_db_job)
+            pri_dao.select_task_action_timers(
+                self.pool.load_db_task_action_timers)
+            pri_dao.select_xtriggers_for_restart(
+                self.xtrigger_mgr.load_xtrigger_for_restart)
+            pri_dao.select_abs_outputs_for_restart(
+                self.pool.load_abs_outputs_for_restart)
+            self.pool.load_db_tasks_to_hold()
+        finally:
+            pri_dao.close()
 
     def restart_remote_init(self):
         """Remote init for all submitted/running tasks in the pool."""
@@ -938,13 +934,13 @@ class Scheduler:
         """Remove tasks."""
         return self.pool.remove_tasks(items)
 
-    def command_reload_workflow(self):
+    def command_reload_workflow(self) -> None:
         """Reload workflow configuration."""
         LOG.info("Reloading the workflow definition.")
         old_tasks = set(self.config.get_task_name_list())
         # Things that can't change on workflow reload:
-        pri_dao = self.workflow_db_mgr.get_pri_dao()
-        pri_dao.select_workflow_params(self._load_workflow_params)
+        self.workflow_db_mgr.pri_dao.select_workflow_params(
+            self._load_workflow_params)
 
         self.load_flow_file(is_reload=True)
         self.broadcast_mgr.linearized_ancestors = (
@@ -1894,6 +1890,15 @@ class Scheduler:
             self.options.stopcp = str(stoppoint)
             self.pool.set_stop_point(get_point(self.options.stopcp))
             self.validate_finalcp()
+
+    def process_hold_point(self) -> None:
+        """Set hold after cycle point from cli opts or flow.cylc."""
+        holdcp: Optional[str] = (
+            self.options.holdcp or
+            self.config.cfg['scheduling']['hold after cycle point']
+        )
+        if holdcp:
+            self.command_set_hold_point(holdcp)
 
     async def handle_exception(self, exc: Exception) -> NoReturn:
         """Gracefully shut down the scheduler given a caught exception.

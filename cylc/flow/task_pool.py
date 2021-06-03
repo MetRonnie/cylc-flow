@@ -21,7 +21,9 @@ from collections import Counter
 from string import ascii_letters
 import json
 from time import time
-from typing import Dict, Iterable, List, Optional, Set, TYPE_CHECKING, Tuple
+from typing import (
+    Dict, Iterable, List, Optional, Sequence, Set, TYPE_CHECKING, Tuple
+)
 
 from cylc.flow import LOG
 from cylc.flow.cycling.loader import get_point, standardise_point_string
@@ -421,7 +423,12 @@ class TaskPool:
         cycle, name, output = row
         self.abs_outputs_done.add((name, cycle, output))
 
-    def load_db_task_pool_for_restart(self, row_idx, row):
+    def load_db_task_pool_for_restart(
+        self,
+        row_idx: int,
+        row: Sequence[str],
+        prerequisites: List[Tuple[str, str, str, str]]
+    ) -> None:
         """Load tasks from DB task pool/states/jobs tables.
 
         Output completion status is loaded from the DB, and tasks recorded
@@ -439,9 +446,10 @@ class TaskPool:
                 self.config.get_taskdef(name),
                 get_point(cycle),
                 flow_label,
-                is_held=is_held,
-                submit_num=submit_num,
-                is_late=bool(is_late))
+                is_held=bool(int(is_held)),
+                submit_num=int(submit_num),
+                is_late=bool(is_late)  # if false, is_late will be "", not "0"
+            )
         except WorkflowConfigError:
             LOG.exception(
                 f'ignoring task {name} from the workflow run database\n'
@@ -461,7 +469,7 @@ class TaskPool:
                 if time_run:
                     itask.set_summary_time('started', time_run)
                 if timeout is not None:
-                    itask.timeout = timeout
+                    itask.timeout = float(timeout)
             elif status == TASK_STATUS_PREPARING:
                 # put back to be readied again.
                 status = TASK_STATUS_WAITING
@@ -485,8 +493,8 @@ class TaskPool:
             # Update prerequisite satisfaction status from DB
             sat = {}
             for prereq_name, prereq_cycle, prereq_output, satisfied in (
-                    self.workflow_db_mgr.pri_dao.select_task_prerequisites(
-                        cycle, name)):
+                prerequisites
+            ):
                 key = (prereq_name, prereq_cycle, prereq_output)
                 sat[key] = satisfied if satisfied != '0' else False
 

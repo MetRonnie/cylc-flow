@@ -26,9 +26,9 @@ This module provides the logic to:
 import json
 import os
 from pkg_resources import parse_version
-from shutil import copy, rmtree
+from shutil import copy
 from tempfile import mkstemp
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Tuple
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING, Tuple, Union
 
 from cylc.flow import LOG
 from cylc.flow.broadcast_report import get_broadcast_change_iter
@@ -39,6 +39,8 @@ from cylc.flow.exceptions import ServiceFileError
 
 if TYPE_CHECKING:
     from cylc.flow.cycling import PointBase
+    from pathlib import Path
+    from cylc.flow.scheduler import Scheduler
     from cylc.flow.task_pool import TaskPool
 
 # # TODO: narrow down Any (should be str | int) after implementing type
@@ -89,12 +91,11 @@ class WorkflowDatabaseManager:
     TABLE_XTRIGGERS = CylcWorkflowDAO.TABLE_XTRIGGERS
     TABLE_ABS_OUTPUTS = CylcWorkflowDAO.TABLE_ABS_OUTPUTS
 
-    def __init__(self, pri_d=None, pub_d=None):
-        self.pri_path = None
-        if pri_d:
-            self.pri_path = os.path.join(
-                pri_d, CylcWorkflowDAO.DB_FILE_BASE_NAME)
-        self.pub_path = None
+    def __init__(
+        self, pri_d: Union[str, 'Path'], pub_d: Union[str, 'Path', None] = None
+    ) -> None:
+        self.pri_path = os.path.join(pri_d, CylcWorkflowDAO.DB_FILE_BASE_NAME)
+        self.pub_path: Optional[str] = None
         if pub_d:
             self.pub_path = os.path.join(
                 pub_d, CylcWorkflowDAO.DB_FILE_BASE_NAME)
@@ -202,21 +203,12 @@ class WorkflowDatabaseManager:
         else:
             return json.dumps([type(obj).__name__, obj.__getnewargs__()])
 
-    def on_workflow_start(self, is_restart):
+    def on_workflow_start(self) -> None:
         """Initialise data access objects.
 
-        Ensure that:
-        * private database file is private
-        * public database is in sync with private database
+        Ensure that public database is in sync with private database
         """
-        if not is_restart:
-            try:
-                os.unlink(self.pri_path)
-            except OSError:
-                # Just in case the path is a directory!
-                rmtree(self.pri_path, ignore_errors=True)
         self.pri_dao = self.get_pri_dao()
-        os.chmod(self.pri_path, PERM_PRIVATE)
         self.pub_dao = CylcWorkflowDAO(self.pub_path, is_public=True)
         self.copy_pri_to_pub()
 
@@ -235,6 +227,7 @@ class WorkflowDatabaseManager:
             return
         # Record workflow parameters and tasks in pool
         # Record any broadcast settings to be dumped out
+        # TODO: I think this could be better optimised
         if any(self.db_deletes_map.values()):
             for table_name, db_deletes in sorted(
                     self.db_deletes_map.items()):
@@ -311,13 +304,13 @@ class WorkflowDatabaseManager:
                 "namespace": namespace,
                 "inheritance": json.dumps(value)})
 
-    def put_workflow_params(self, schd):
+    def put_workflow_params(self, schd: 'Scheduler') -> None:
         """Put various workflow parameters from schd in runtime database.
 
         This method queues the relevant insert statements.
 
         Arguments:
-            schd (cylc.flow.scheduler.Scheduler): scheduler object.
+            schd: scheduler object.
         """
         self.db_deletes_map[self.TABLE_WORKFLOW_PARAMS].append({})
         self.db_inserts_map[self.TABLE_WORKFLOW_PARAMS].extend([
@@ -603,36 +596,55 @@ class WorkflowDatabaseManager:
                 f"{self.pri_dao.db_file_name}")
             self.pub_dao.n_tries = 0
 
-    def restart_check(self) -> bool:
-        """Check & vacuum the runtime DB for a restart.
+    def check_restart(self) -> bool:
+        """Check private database and return whether this is a restart.
+
+        * Check for the existence of a private DB
+        * Create one if it doesn't exist
+        * Check it is compatible with the current Cylc version
+        * Ensure it is private
+        * Vacuum if it is a restart
 
         Raises ServiceFileError if DB is incompatible.
-
-        Returns False if DB doesn't exist, else True.
         """
+        is_restart: bool
         try:
             self.check_workflow_db_compatibility()
         except FileNotFoundError:
-            return False
+            is_restart = False
+        except IsADirectoryError as exc:
+            raise ServiceFileError(str(exc))
         except ServiceFileError as exc:
             raise ServiceFileError(f"Cannot restart - {exc}")
-        pri_dao = self.get_pri_dao()
+        else:
+            is_restart = True
+        pri_dao = self.get_pri_dao()  # Creates DB if it didn't exist
         try:
-            pri_dao.vacuum()
-            self.n_restart = pri_dao.select_workflow_params_restart_count() + 1
-            self.put_workflow_params_1(self.KEY_RESTART_COUNT, self.n_restart)
+            # Ensure that the private DB file is private:
+            os.chmod(self.pri_path, PERM_PRIVATE)
+            if is_restart:
+                pri_dao.vacuum()
+                self.n_restart = (
+                    pri_dao.select_workflow_params_restart_count() + 1)
+                self.put_workflow_params_1(
+                    self.KEY_RESTART_COUNT, self.n_restart)
         finally:
             pri_dao.close()
-        return True
+        return is_restart
 
-    def check_workflow_db_compatibility(self):
+    def check_workflow_db_compatibility(self) -> None:
         """Raises ServiceFileError if the existing workflow database is
         incompatible with the current version of Cylc."""
+        if os.path.isdir(self.pri_path):
+            raise IsADirectoryError(
+                f"Unexpected directory found at {self.pri_path}")
         if not os.path.isfile(self.pri_path):
             raise FileNotFoundError(self.pri_path)
         incompat_msg = (
             f"Workflow database is incompatible with Cylc {CYLC_VERSION}")
         pri_dao = self.get_pri_dao()
+        # FIXME: If the current schema doesn't match the tables in the
+        # existing DB, the above creates empty tables for the missing ones
         try:
             last_run_ver = pri_dao.connect().execute(
                 f'SELECT value FROM {self.TABLE_WORKFLOW_PARAMS} '

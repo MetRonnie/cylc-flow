@@ -142,8 +142,9 @@ def mod_scheduler():
 
     Usage: see scheduler() below
     """
-    with _make_scheduler() as _scheduler:
-        yield _scheduler
+    # with _make_scheduler() as _scheduler:
+    #     yield _scheduler
+    return _make_scheduler
 
 
 @pytest.fixture
@@ -154,8 +155,9 @@ def scheduler():
         reg (str): Workflow name.
         **opts (Any): Options to be passed to the Scheduler.
     """
-    with _make_scheduler() as _scheduler:
-        yield _scheduler
+    # with _make_scheduler() as _scheduler:
+    #     yield _scheduler
+    return _make_scheduler
 
 
 @pytest.fixture(scope='module')

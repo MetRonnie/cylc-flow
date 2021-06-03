@@ -17,12 +17,18 @@
 """Functionality for expressing and evaluating logical triggers."""
 
 import math
+from typing import Dict, List, Optional, TYPE_CHECKING, Tuple
 
 from cylc.flow import ID_DELIM
 from cylc.flow.cycling.loader import get_point
 from cylc.flow.exceptions import TriggerExpressionError
 from cylc.flow.data_messages_pb2 import (  # type: ignore
     PbPrerequisite, PbCondition)
+
+if TYPE_CHECKING:
+    from cylc.flow.cycling import PointBase
+
+Message = Tuple[str, str, str]
 
 
 class Prerequisite:
@@ -50,31 +56,33 @@ class Prerequisite:
     DEP_STATE_OVERRIDDEN = 'force satisfied'
     DEP_STATE_UNSATISFIED = False
 
-    def __init__(self, point, start_point=None):
+    def __init__(
+        self, point: 'PointBase', start_point: Optional['PointBase'] = None
+    ) -> None:
         # The cycle point to which this prerequisite belongs.
-        # cylc.flow.cycling.PointBase
-        self.point = point
+        self.point: 'PointBase' = point
 
         # Start point for prerequisite validity.
-        # cylc.flow.cycling.PointBase
-        self.start_point = start_point
+        self.start_point: Optional['PointBase'] = start_point
 
         # List of cycle point strings that this prerequisite depends on.
-        self.target_point_strings = []
+        self.target_point_strings: List[str] = []
 
         # Dictionary of messages pertaining to this prerequisite.
         # {('task name', 'point string', 'output'): DEP_STATE_X, ...}
-        self.satisfied = {}
+        self.satisfied: Dict[Message, str] = {}
+
+        # TODO: make Message into a class? And rename to something better?
 
         # Expression present only when conditions are used.
         # 'foo.1 failed & bar.1 succeeded'
-        self.conditional_expression = None
+        self.conditional_expression: Optional[str] = None
 
         # The cached state of this prerequisite:
         # * `None` (no cached state)
         # * `True` (prerequisite satisfied)
         # * `False` (prerequisite unsatisfied).
-        self._all_satisfied = None
+        self._all_satisfied: Optional[bool] = None
 
     def add(self, name, point, output, pre_initial=False):
         """Register an output with this prerequisite.
@@ -87,7 +95,7 @@ class Prerequisite:
             pre_initial (bool): this is a pre-initial dependency.
 
         """
-        message = (name, str(point), output)
+        message: Message = (name, str(point), output)
 
         # Add a new prerequisite as satisfied if pre-initial, else unsatisfied.
         if pre_initial:
