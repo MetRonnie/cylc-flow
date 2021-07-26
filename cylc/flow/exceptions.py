@@ -15,9 +15,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """Exceptions for "expected" errors."""
 
-import errno
 import os
-from typing import Callable, Iterable, NoReturn, Optional, Tuple, Type
+from typing import Iterable, Optional
 
 
 class CylcError(Exception):
@@ -98,27 +97,6 @@ class ServiceFileError(CylcError):
 
 class WorkflowFilesError(CylcError):
     """Exception for errors related to workflow files/directories."""
-
-
-def handle_rmtree_err(
-    function: Callable,
-    path: str,
-    excinfo: Tuple[Type[Exception], Exception, object]
-) -> NoReturn:
-    """Error handler for shutil.rmtree."""
-    exc = excinfo[1]
-    if not isinstance(exc, OSError):
-        raise exc
-    if exc.errno == errno.ENOTEMPTY:
-        # "Directory not empty", usually either due to filesystem lag
-        # or jobs still running
-        msg = "This could be a temporary issue with the filesystem."
-    elif exc.errno == errno.EBUSY:  # noqa: SIM106
-        # "Device or resource busy", likely due to jobs still running
-        msg = "This could be due to Cylc jobs still running."
-    else:
-        raise exc
-    raise FileRemovalError(exc.errno, path, msg)
 
 
 class FileRemovalError(CylcError):

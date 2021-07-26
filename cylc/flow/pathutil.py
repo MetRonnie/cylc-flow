@@ -15,22 +15,46 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """Functions to return paths to common workflow files and directories."""
 
+import errno
 import os
 from pathlib import Path
 import re
 from shutil import rmtree
-from typing import Dict, Iterable, Set, Union, Optional, Any
+from typing import (
+    Callable, Dict, Iterable, NoReturn, Set, Tuple, Type, Union, Optional, Any
+)
 
 from cylc.flow import LOG
 from cylc.flow.cfgspec.glbl_cfg import glbl_cfg
 from cylc.flow.exceptions import (
-    UserInputError, WorkflowFilesError, handle_rmtree_err
+    FileRemovalError, UserInputError, WorkflowFilesError
 )
 from cylc.flow.platforms import get_localhost_install_target
 
 # Note: do not import this elsewhere, as it might bypass unit test
 # monkeypatching:
 _CYLC_RUN_DIR = os.path.join('$HOME', 'cylc-run')
+
+
+def handle_rmtree_err(
+    function: Callable,
+    path: str,
+    excinfo: Tuple[Type[Exception], Exception, object]
+) -> NoReturn:
+    """Error handler for shutil.rmtree."""
+    exc = excinfo[1]
+    if not isinstance(exc, OSError):
+        raise exc
+    if exc.errno == errno.ENOTEMPTY:
+        # "Directory not empty", usually either due to filesystem lag
+        # or jobs still running
+        msg = "This could be a temporary issue with the filesystem."
+    elif exc.errno == errno.EBUSY:  # noqa: SIM106
+        # "Device or resource busy", likely due to jobs still running
+        msg = "This could be due to Cylc jobs still running."
+    else:
+        raise exc
+    raise FileRemovalError(exc.errno, path, msg)
 
 
 def expand_path(*args: Union[Path, str]) -> str:

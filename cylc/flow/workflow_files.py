@@ -45,7 +45,6 @@ from cylc.flow.exceptions import (
     PlatformLookupError,
     ServiceFileError,
     TaskRemoteMgmtError,
-    handle_rmtree_err,
     UserInputError,
     WorkflowFilesError
 )
@@ -53,6 +52,7 @@ from cylc.flow.pathutil import (
     expand_path,
     get_cylc_run_dir,
     get_workflow_run_dir,
+    handle_rmtree_err,
     make_localhost_symlinks,
     parse_rm_dirs,
     remove_dir_and_target,
