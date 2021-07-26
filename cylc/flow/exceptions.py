@@ -16,7 +16,8 @@
 """Exceptions for "expected" errors."""
 
 import errno
-from typing import Callable, Iterable, NoReturn, Tuple, Type
+import os
+from typing import Callable, Iterable, NoReturn, Optional, Tuple, Type
 
 
 class CylcError(Exception):
@@ -106,22 +107,41 @@ def handle_rmtree_err(
 ) -> NoReturn:
     """Error handler for shutil.rmtree."""
     exc = excinfo[1]
-    if isinstance(exc, OSError) and exc.errno == errno.ENOTEMPTY:
-        # "Directory not empty", likely due to filesystem lag
-        raise FileRemovalError(exc)
-    raise exc
+    if not isinstance(exc, OSError):
+        raise exc
+    if exc.errno == errno.ENOTEMPTY:
+        # "Directory not empty", usually either due to filesystem lag
+        # or jobs still running
+        msg = "This could be a temporary issue with the filesystem."
+    elif exc.errno == errno.EBUSY:  # noqa: SIM106
+        # "Device or resource busy", likely due to jobs still running
+        msg = "This could be due to Cylc jobs still running."
+    else:
+        raise exc
+    raise FileRemovalError(exc.errno, path, msg)
 
 
 class FileRemovalError(CylcError):
-    """Exception for errors during deletion of files/directories, which are
-    probably the filesystem's fault, not Cylc's."""
+    """Exception for errors during deletion of workflow files/directories,
+    which are probably the filesystem's fault, not Cylc's.
 
-    def __init__(self, exc: Exception) -> None:
-        CylcError.__init__(
-            self,
-            f"{exc}. This is probably a temporary issue with the filesystem, "
-            "not a problem with Cylc."
-        )
+    Args:
+        err_no: The OSError number.
+        path: Path to the file/dir.
+    """
+
+    def __init__(
+        self, err_no: int, path: str, msg: Optional[str] = None
+    ) -> None:
+        self.err_no = err_no
+        self.path = path
+        self.msg = msg
+
+    def __str__(self):
+        ret = f"{os.strerror(self.err_no)}: {self.path}."
+        if self.msg:
+            ret += f" {self.msg}"
+        return ret
 
 
 class TaskRemoteMgmtError(CylcError):
