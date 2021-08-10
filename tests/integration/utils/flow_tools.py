@@ -71,7 +71,7 @@ def _make_scheduler():
     yield __make_scheduler
     # Teardown
     if hasattr(schd, 'workflow_db_mgr'):
-        schd.workflow_db_mgr.on_workflow_shutdown()
+        schd.workflow_db_mgr.on_workflow_shutdown(None)
 
 
 @asynccontextmanager

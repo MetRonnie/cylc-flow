@@ -1731,7 +1731,7 @@ class Scheduler:
         # disconnect from workflow-db, stop db queue
         try:
             self.workflow_db_mgr.process_queued_ops()
-            self.workflow_db_mgr.on_workflow_shutdown()
+            self.workflow_db_mgr.on_workflow_shutdown(self.is_restart)
         except Exception as exc:
             LOG.exception(exc)
 

@@ -28,7 +28,7 @@ import os
 from pkg_resources import parse_version
 from shutil import copy, rmtree
 from tempfile import mkstemp
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Tuple
+from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING, Tuple
 
 from cylc.flow import LOG
 from cylc.flow.broadcast_report import get_broadcast_change_iter
@@ -129,6 +129,8 @@ class WorkflowDatabaseManager:
             self.TABLE_ABS_OUTPUTS: []}
         self.db_updates_map: Dict[str, List[DbUpdateTuple]] = {}
 
+        self.has_put_workflow_params: bool = False
+
     def copy_pri_to_pub(self) -> None:
         """Copy content of primary database file to public database file."""
         self.pub_dao.close()
@@ -222,7 +224,7 @@ class WorkflowDatabaseManager:
         self.pub_dao = CylcWorkflowDAO(self.pub_path, is_public=True)
         self.copy_pri_to_pub()
 
-    def on_workflow_shutdown(self):
+    def on_workflow_shutdown(self, was_restart: Optional[bool]) -> None:
         """Close data access objects."""
         if self.pri_dao:
             self.pri_dao.close()
@@ -230,6 +232,10 @@ class WorkflowDatabaseManager:
         if self.pub_dao:
             self.pub_dao.close()
             self.pub_dao = None
+        if was_restart is False and not self.has_put_workflow_params:
+            # Note: Only when schd.is_restart is explicitly False, not None
+            LOG.debug("The workflow DB did not fully initialize; removing now")
+            os.remove(self.pri_path)
 
     def process_queued_ops(self) -> None:
         """Handle queued db operations for each task proxy."""
@@ -351,6 +357,7 @@ class WorkflowDatabaseManager:
             if value is not None:
                 self.db_inserts_map[self.TABLE_WORKFLOW_PARAMS].append({
                     "key": key, "value": value})
+        self.has_put_workflow_params = True
 
     def put_workflow_params_1(self, key, value):
         """Queue insertion of 1 key=value pair to the workflow_params table."""
