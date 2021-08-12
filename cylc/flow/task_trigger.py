@@ -14,14 +14,20 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from typing import Optional, Set, TYPE_CHECKING
+
 from cylc.flow.cycling.loader import (
     get_point, get_point_relative, get_interval)
-from cylc.flow.prerequisite import Prerequisite
+from cylc.flow.prerequisite import ExpressionList, Prerequisite
 from cylc.flow.task_outputs import (
     TASK_OUTPUT_EXPIRED, TASK_OUTPUT_SUBMITTED, TASK_OUTPUT_SUBMIT_FAILED,
     TASK_OUTPUT_STARTED, TASK_OUTPUT_SUCCEEDED, TASK_OUTPUT_FAILED,
     TASK_OUTPUT_FINISHED
 )
+
+if TYPE_CHECKING:
+    from cylc.flow.cycling import PointBase
+
 
 # Task trigger names (e.g. foo:fail => bar).
 # Can use "foo:fail => bar" or "foo:failed => bar", etc.
@@ -40,11 +46,11 @@ class TaskTrigger:
     """Class representing an upstream dependency.
 
     Args:
-        task_name (str): The name of the upstream task.
-        cycle_point_offset (str): String representing the offset of the
+        task_name: The name of the upstream task.
+        cycle_point_offset: String representing the offset of the
             upstream task (e.g. -P1D) if this dependency is not an absolute
             one. Else None.
-        output (str): The task state / output for this trigger e.g. succeeded.
+        output: The task state / output for this trigger e.g. succeeded.
 
     """
 
@@ -52,9 +58,16 @@ class TaskTrigger:
                  'offset_is_irregular', 'offset_is_absolute',
                  'offset_is_from_icp', 'initial_point']
 
-    def __init__(self, task_name, cycle_point_offset, output,
-                 offset_is_irregular=False, offset_is_absolute=False,
-                 offset_is_from_icp=False, initial_point=None):
+    def __init__(
+        self,
+        task_name: str,
+        cycle_point_offset: str,
+        output: str,
+        offset_is_irregular: bool = False,
+        offset_is_absolute: bool = False,
+        offset_is_from_icp: bool = False,
+        initial_point: Optional[str] = None
+    ) -> None:
         self.task_name = task_name
         self.cycle_point_offset = cycle_point_offset
         self.output = output
@@ -120,14 +133,14 @@ class TaskTrigger:
             point = from_point - get_interval(self.cycle_point_offset)
         return point
 
-    def get_point(self, point):
+    def get_point(self, point: 'PointBase') -> 'PointBase':
         """Return the point of the output to which this TaskTrigger pertains.
 
         Args:
-            point (cylc.flow.cycling.PointBase): cycle point of dependent task.
+            point: cycle point of dependent task.
 
         Returns:
-            cylc.flow.cycling.PointBase: cycle point of the dependency.
+            Cycle point of the dependency.
 
         """
         if self.offset_is_absolute:
@@ -150,7 +163,7 @@ class TaskTrigger:
             return '%s:%s' % (self.task_name, self.output)
 
     @staticmethod
-    def standardise_name(name):
+    def standardise_name(name: str) -> str:
         """Replace trigger name aliases with standard names.
 
         Arg name should be a valid standard name or alias, otherwise assumed
@@ -168,18 +181,23 @@ class Dependency:
     Used to generate cylc.flow.prerequisite.Prerequisite objects.
 
     Args:
-        exp (list): A (nested) list of TaskTrigger objects and conditional
+        exp: A (nested) list of TaskTrigger objects and conditional
             characters representing the dependency. E.G: "foo & bar" would be
             [<TaskTrigger("foo")>, "&", <TaskTrigger("Bar")>].
-        task_triggers (set): A set of TaskTrigger objects contained in the
+        task_triggers: A set of TaskTrigger objects contained in the
             expression (exp).
-        suicide (bool): True if this is a suicide trigger else False.
+        suicide: True if this is a suicide trigger else False.
 
     """
 
     __slots__ = ['_exp', 'task_triggers', 'suicide']
 
-    def __init__(self, exp, task_triggers, suicide):
+    def __init__(
+        self,
+        exp: list,
+        task_triggers: Set[TaskTrigger],
+        suicide: bool
+    ) -> None:
         self._exp = exp
         self.task_triggers = tuple(task_triggers)  # More memory efficient.
         self.suicide = suicide
@@ -236,19 +254,19 @@ class Dependency:
         cpre.set_condition(self.get_expression(point))
         return cpre
 
-    def get_expression(self, point):
+    def get_expression(self, point: 'PointBase') -> ExpressionList:
         """Return the expression as a string.
 
         Args:
-            point (cylc.flow.cycling.PointBase): The cycle point at which to
-                generate the expression string for.
+            point: The cycle point at which to generate the expression
+                string for.
 
         Return:
-            string: The expression as a parsable string in the cylc graph
-            format.
+            The expression as a parsable string in the cylc graph format.
 
         """
-        return ''.join(self._stringify_list(self._exp, point))
+        # return ''.join(self._stringify_list(self._exp, point))
+        return ExpressionList(self._exp, point)
 
     def __str__(self):
         ret = []
@@ -260,22 +278,3 @@ class Dependency:
             else:
                 ret.append('( %s )' % str(item))
         return ' '.join(ret)
-
-    @classmethod
-    def _stringify_list(cls, nested_expr, point):
-        """Stringify a nested list of TaskTrigger objects."""
-        ret = []
-        for item in nested_expr:
-            if isinstance(item, TaskTrigger):
-                ret.append(
-                    Prerequisite.MESSAGE_TEMPLATE % (
-                        item.get_point(point),
-                        item.task_name,
-                        item.output,
-                    )
-                )
-            elif isinstance(item, list):
-                ret.extend(['(', cls._stringify_list(item, point), ')'])
-            else:
-                ret.append(item)
-        return ret
