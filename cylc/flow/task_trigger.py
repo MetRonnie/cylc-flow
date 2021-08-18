@@ -14,7 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from typing import Optional, Set, TYPE_CHECKING
+from typing import Iterable, Optional, TYPE_CHECKING
 
 from cylc.flow.cycling.loader import (
     get_point, get_point_relative, get_interval)
@@ -27,6 +27,7 @@ from cylc.flow.task_outputs import (
 
 if TYPE_CHECKING:
     from cylc.flow.cycling import PointBase
+    from cylc.flow.taskdef import TaskDef
 
 
 # Task trigger names (e.g. foo:fail => bar).
@@ -190,30 +191,28 @@ class Dependency:
 
     """
 
-    __slots__ = ['_exp', 'task_triggers', 'suicide']
+    __slots__ = {'_exp', 'task_triggers', 'suicide'}
 
     def __init__(
         self,
         exp: list,
-        task_triggers: Set[TaskTrigger],
+        task_triggers: Iterable[TaskTrigger],
         suicide: bool
     ) -> None:
         self._exp = exp
         self.task_triggers = tuple(task_triggers)  # More memory efficient.
         self.suicide = suicide
 
-    def get_prerequisite(self, point, tdef):
+    def get_prerequisite(
+        self,
+        point: 'PointBase',
+        tdef: 'TaskDef'
+    ) -> Prerequisite:
         """Generate a Prerequisite object from this dependency.
 
         Args:
-            point (cylc.flow.cycling.PointBase): The cycle point at which to
-                generate the Prerequisite for.
-            tdef (cylc.flow.taskdef.TaskDef): The TaskDef of the dependent
-                task.
-
-        Returns:
-            cylc.flow.prerequisite.Prerequisite
-
+            point: The cycle point at which to generate the Prerequisite for.
+            tdef: The TaskDef of the dependent task.
         """
         # Create Prerequisite.
         cpre = Prerequisite(point, tdef.start_point)
@@ -234,8 +233,7 @@ class Dependency:
                     if (tdef.max_future_prereq_offset is None or
                             (prereq_offset >
                              tdef.max_future_prereq_offset)):
-                        tdef.max_future_prereq_offset = (
-                            prereq_offset)
+                        tdef.max_future_prereq_offset = prereq_offset
                 cpre.add(
                     task_trigger.task_name,
                     task_trigger.get_point(point),
