@@ -16,10 +16,9 @@
 
 """Functionality for expressing and evaluating logical triggers."""
 
-from operator import and_, or_
 import math
 from typing import (
-    Callable, Dict, List, NamedTuple, Optional, TYPE_CHECKING, Union
+    Dict, List, NamedTuple, Optional, Set, TYPE_CHECKING, Union
 )
 
 from cylc.flow.cycling.loader import get_point
@@ -27,11 +26,11 @@ from cylc.flow.data_messages_pb2 import (  # type: ignore
     PbPrerequisite,
     PbCondition,
 )
-from cylc.flow.exceptions import TriggerExpressionError
 from cylc.flow.id import Tokens
 
 if TYPE_CHECKING:
     from cylc.flow.cycling import PointBase
+    from cylc.flow.task_trigger import TriggerExpression
 
 
 class MessageTuple(NamedTuple):
@@ -40,90 +39,11 @@ class MessageTuple(NamedTuple):
     name: str
     output: str
 
+    def __str__(self) -> str:
+        return '{}/{} {}'.format(*self)
+
 
 SatisfactionDict = Dict[MessageTuple, Union[str, bool]]
-
-
-class ExpressionList:
-
-    _op_map = {
-        '&': and_,
-        '|': or_
-    }
-
-    def __init__(self, expr: list, point: 'PointBase') -> None:
-        from cylc.flow.task_trigger import TaskTrigger
-
-        # self.orig_list = expr
-        self.is_conditional = False
-        self._repr_list: List[Union[MessageTuple, 'ExpressionList', str]] = []
-
-        operators: List[Callable[..., bool]] = [and_]
-        # an "item" is basically either a tasks or a parenthesised expression
-        items: List[Union[MessageTuple, 'ExpressionList']] = []
-
-        err = False
-        for i, val in enumerate(expr):
-            if i % 2 == 0:
-                if isinstance(val, TaskTrigger):
-                    val = MessageTuple(
-                        val.task_name, str(val.get_point(point)), val.output
-                    )
-                elif isinstance(val, list):  # noqa: SIM106
-                    val = ExpressionList(val, point)
-                    if val.is_conditional:
-                        self.is_conditional = True
-                else:
-                    err = True
-                items.append(val)
-            else:
-                try:
-                    operators.append(self._op_map[val])
-                except KeyError:
-                    err = True
-            self._repr_list.append(val)
-            if err:
-                break
-
-        if err or len(expr) % 2 == 0:
-            raise TriggerExpressionError(
-                f"unexpected '{val}' in trigger expression: {self}"
-            )
-
-        self.data = list(zip(operators, items))
-        self.is_conditional |= (or_ in operators)
-
-    def evaluate(self, satisfied: SatisfactionDict) -> bool:
-        ret = True
-        for operator, item in self.data:
-            # short circuiting?
-            # if (ret and operator is or_) or (not ret and operator is and_):
-            #     break
-            ret = operator(ret, self._evaluate_item(item, satisfied))
-        return ret
-
-    @staticmethod
-    def _evaluate_item(
-        item: Union[MessageTuple, 'ExpressionList'],
-        satisfied: SatisfactionDict
-    ) -> bool:
-        if isinstance(item, ExpressionList):
-            return item.evaluate(satisfied)
-        return bool(satisfied[item])
-
-    def __str__(self) -> str:
-        ret = []
-        for el in self._repr_list:
-            if isinstance(el, ExpressionList):
-                ret.append(f'({el})')
-            elif isinstance(el, tuple):
-                ret.append(Prerequisite.MESSAGE_TEMPLATE % el)
-            else:
-                ret.append(f' {el} ')
-        return ''.join(ret)
-
-    def __repr__(self) -> str:
-        return f"<{type(self).__name__}[ {self} ]>"
 
 
 class Prerequisite:
@@ -133,11 +53,11 @@ class Prerequisite:
     satisfying. This corresponds to multiple tasks being dependencies of a task
     in Cylc graphs (e.g. `a => c`, `b => c`).
 
-    But a single Prerequisite can also have multiple 'messages'
-    (basically, subcomponents of a Prerequisite)
-    corresponding to parenthesised expressions in Cylc graphs (e.g.
-    `(a & b) => c` or `(a | b) => c`). For the OR operator (`|`), only one
-    message has to be satisfied for the Prerequisite to be satisfied.
+    But a single Prerequisite can also have multiple 'messages' (basically,
+    subcomponents of a Prerequisite) corresponding to parenthesised
+    expressions in Cylc graphs (e.g. `(a & b) => c` or `(a | b) => c`).
+    For the OR operator (`|`), only one message has to be satisfied for the
+    Prerequisite to be satisfied.
     """
 
     # Memory optimization - constrain possible attributes to this list.
@@ -145,10 +65,6 @@ class Prerequisite:
         "satisfied", "_all_satisfied", "target_point_strings", "start_point",
         "conditional_expression", "point"
     }
-
-    # Extracts T from "foo.T succeeded" etc.
-    # SATISFIED_TEMPLATE = 'bool(self.satisfied[("%s", "%s", "%s")])'
-    MESSAGE_TEMPLATE = r'%s/%s %s'
 
     DEP_STATE_SATISFIED = 'satisfied naturally'
     DEP_STATE_OVERRIDDEN = 'force satisfied'
@@ -174,7 +90,7 @@ class Prerequisite:
 
         # Expression present only when conditions are used.
         # '1/foo failed & 1/bar succeeded'
-        self.conditional_expression: Optional[ExpressionList] = None
+        self.conditional_expression: Optional['TriggerExpression'] = None
 
         # The cached state of this prerequisite:
         # * `None` (no cached state)
@@ -211,26 +127,7 @@ class Prerequisite:
         if point and str(point) not in self.target_point_strings:
             self.target_point_strings.append(str(point))
 
-    # def _get_conditional_expression(expr: List[Any]) -> List[Any]:
-    #     for message in self.satisfied:
-    #         expr = expr.replace(self.MESSAGE_TEMPLATE % message,
-    #                             self.SATISFIED_TEMPLATE % message)
-
-    # def get_raw_conditional_expression(self) -> Optional[str]:
-    #     """Return a representation of this prereq as a string.
-
-    #     Returns None if this prerequisite is not a conditional one.
-
-    #     """
-    #     expr = self.conditional_expression
-    #     if not expr:
-    #         return None
-    #     for message in self.satisfied:
-    #         expr = expr.replace(self.SATISFIED_TEMPLATE % message,
-    #                             self.MESSAGE_TEMPLATE % message)
-    #     return expr
-
-    def set_condition(self, expr: ExpressionList) -> None:
+    def set_condition(self, expr: 'TriggerExpression') -> None:
         """Set the conditional expression for this prerequisite.
         Resets the cached state (self._all_satisfied).
 
@@ -266,21 +163,10 @@ class Prerequisite:
         if self.satisfied == {}:
             # No prerequisites left after pre-initial simplification.
             return True
-        self._all_satisfied = self._is_satisfied()
+        self._all_satisfied = self._eval_is_satisfied()
         return self._all_satisfied
 
-    # def _evaluate_conditional_expression(self) -> bool:
-    #     ret: List[bool] = []
-    #     for item in self.conditional_expression:
-    #         if isinstance(item, MessageTuple):
-    #             ret.append(bool(item in self.satisfied))
-    #         elif isinstance(item, ExpressionList):
-    #             ret.append(['(', cls._stringify_list(item, point), ')'])
-    #         else:
-    #             ret.append(item)
-    #     return all(ret)
-
-    def _is_satisfied(self) -> bool:
+    def _eval_is_satisfied(self) -> bool:
         """Evaluate the prerequisite's (possibly conditional) expression.
 
         Does not cache the result.
@@ -290,7 +176,9 @@ class Prerequisite:
             return self.conditional_expression.evaluate(self.satisfied)
         return all(self.satisfied.values())
 
-    def satisfy_me(self, all_task_outputs):
+    def satisfy_me(
+        self, all_task_outputs: Set[MessageTuple]
+    ) -> Set[MessageTuple]:
         """Evaluate pre-requisite against known outputs.
 
         Updates cache with the evaluation result.
@@ -299,7 +187,7 @@ class Prerequisite:
         relevant_messages = all_task_outputs & set(self.satisfied)
         for message in relevant_messages:
             self.satisfied[message] = self.DEP_STATE_SATISFIED
-            self._all_satisfied = self._is_satisfied()
+            self._all_satisfied = self._eval_is_satisfied()
         return relevant_messages
 
     def api_dump(self) -> Optional['PbPrerequisite']:
@@ -308,18 +196,17 @@ class Prerequisite:
             return None
         if self.conditional_expression:
             temp = str(self.conditional_expression)
-            # temp = temp.replace('|', ' | ')
-            # temp = temp.replace('&', ' & ')
         else:
             for s_msg in self.satisfied:
-                temp = self.MESSAGE_TEMPLATE % s_msg
+                temp = str(s_msg) # Eh??
         conds = []
         num_length = math.ceil(len(self.satisfied) / 10)
         for ind, message_tuple in enumerate(sorted(self.satisfied)):
-            point, name = message_tuple[0:2]
-            t_id = Tokens(cycle=str(point), task=name).relative_id
+            t_id = Tokens(
+                cycle=message_tuple.point, task=message_tuple.name
+            ).relative_id
             char = 'c%.{0}d'.format(num_length) % ind
-            c_msg = self.MESSAGE_TEMPLATE % message_tuple
+            c_msg = str(message_tuple)
             c_val = self.satisfied[message_tuple]
             c_bool = bool(c_val)
             if c_bool is False:

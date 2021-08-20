@@ -14,11 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from typing import Iterable, Optional, TYPE_CHECKING
+from operator import and_, or_
+from typing import Any, Callable, List, Optional, Set, TYPE_CHECKING, Union
 
 from cylc.flow.cycling.loader import (
     get_point, get_point_relative, get_interval)
-from cylc.flow.prerequisite import ExpressionList, Prerequisite
+from cylc.flow.exceptions import TriggerExpressionError
+from cylc.flow.prerequisite import MessageTuple, Prerequisite, SatisfactionDict
 from cylc.flow.task_outputs import (
     TASK_OUTPUT_EXPIRED, TASK_OUTPUT_SUBMITTED, TASK_OUTPUT_SUBMIT_FAILED,
     TASK_OUTPUT_STARTED, TASK_OUTPUT_SUCCEEDED, TASK_OUTPUT_FAILED,
@@ -55,9 +57,9 @@ class TaskTrigger:
 
     """
 
-    __slots__ = ['task_name', 'cycle_point_offset', 'output',
+    __slots__ = {'task_name', 'cycle_point_offset', 'output',
                  'offset_is_irregular', 'offset_is_absolute',
-                 'offset_is_from_icp', 'initial_point']
+                 'offset_is_from_icp', 'initial_point'}
 
     def __init__(
         self,
@@ -153,15 +155,17 @@ class TaskTrigger:
             point = get_point_relative(self.cycle_point_offset, point)
         return point
 
-    def __str__(self):
+    def __str__(self) -> str:
         if not self.offset_is_irregular and self.offset_is_absolute:
             point = get_point(self.cycle_point_offset).standardise()
-            return '%s[%s]:%s' % (self.task_name, point, self.output)
+            return f'{self.task_name}[{point}]:{self.output}'
         elif self.cycle_point_offset:
-            return '%s[%s]:%s' % (self.task_name, self.cycle_point_offset,
-                                  self.output)
+            return f'{self.task_name}[{self.cycle_point_offset}]:{self.output}'
         else:
-            return '%s:%s' % (self.task_name, self.output)
+            return f'{self.task_name}:{self.output}'
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} '{self}'>"
 
     @staticmethod
     def standardise_name(name: str) -> str:
@@ -174,6 +178,102 @@ class TaskTrigger:
             if name == standard_name or name in alt_names:
                 return standard_name
         return name
+
+
+class TriggerExpression:
+    """Class representing a trigger expression at a given cycle point.
+
+    Args:
+        expr: A (nested) list of TaskTrigger objects and conditional
+            characters representing the dependency. E.G: "foo & bar" would be
+            [<TaskTrigger("foo")>, "&", <TaskTrigger("Bar")>].
+        point: The cycle point
+    """
+
+    _op_map = {
+        '&': and_,
+        '|': or_
+    }
+
+    def __init__(self, expr: list, point: 'PointBase') -> None:
+
+        self.is_conditional = False
+        self._repr_list: List[
+            Union[MessageTuple, 'TriggerExpression', str]
+        ] = []
+
+        operators: List[Callable[[Any, Any], bool]] = [and_]
+        # an "item" is basically either a task or a parenthesised expression
+        items: List[Union[MessageTuple, 'TriggerExpression']] = []
+
+        err = False
+        for i, val in enumerate(expr):
+            if i % 2 == 0:
+                if isinstance(val, TaskTrigger):
+                    val = MessageTuple(
+                        str(val.get_point(point)), val.task_name, val.output
+                    )
+                elif isinstance(val, list):
+                    val = TriggerExpression(val, point)
+                    if val.is_conditional:
+                        self.is_conditional = True
+                else:
+                    err = True
+                items.append(val)
+            else:
+                try:
+                    operators.append(self._op_map[val])
+                except KeyError:
+                    err = True
+            self._repr_list.append(val)
+            if err:
+                break
+
+        if err or len(expr) % 2 == 0:
+            raise TriggerExpressionError(
+                f"unexpected '{val}' in trigger expression: {self}"
+            )
+
+        self._data = zip(operators, items)
+        self.is_conditional |= (or_ in operators)
+
+    def evaluate(self, satisfied: SatisfactionDict) -> bool:
+        ret = True
+        for operator, item in self._data:
+            # short circuiting?
+            # if (ret and operator is or_) or (not ret and operator is and_):
+            #     break
+            # if ret:
+            #     if operator is or_:
+            #         break
+            # else:
+            #     if operator is and_:
+            #         break
+            ret = operator(ret, self._evaluate_item(item, satisfied))
+        return ret
+
+    @staticmethod
+    def _evaluate_item(
+        item: Union[MessageTuple, 'TriggerExpression'],
+        satisfied: SatisfactionDict
+    ) -> bool:
+        if isinstance(item, TriggerExpression):
+            return item.evaluate(satisfied)
+        return bool(satisfied[item])
+
+    def __str__(self) -> str:
+        ret = []
+        for el in self._repr_list:
+            if isinstance(el, TriggerExpression):
+                ret.append(f'({el})')
+            elif isinstance(el, MessageTuple):
+                ret.append(str(el))
+            else:
+                ret.append(f' {el} ')
+        return ''.join(ret)
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__}[ {self} ]>"
 
 
 class Dependency:
@@ -194,19 +294,14 @@ class Dependency:
     __slots__ = {'_exp', 'task_triggers', 'suicide'}
 
     def __init__(
-        self,
-        exp: list,
-        task_triggers: Iterable[TaskTrigger],
-        suicide: bool
+        self, exp: list, task_triggers: Set[TaskTrigger], suicide: bool
     ) -> None:
         self._exp = exp
         self.task_triggers = tuple(task_triggers)  # More memory efficient.
         self.suicide = suicide
 
     def get_prerequisite(
-        self,
-        point: 'PointBase',
-        tdef: 'TaskDef'
+        self, point: 'PointBase', tdef: 'TaskDef'
     ) -> Prerequisite:
         """Generate a Prerequisite object from this dependency.
 
@@ -249,24 +344,10 @@ class Dependency:
                 cpre.add(task_trigger.task_name,
                          task_trigger.get_point(point),
                          task_trigger.output)
-        cpre.set_condition(self.get_expression(point))
+        cpre.set_condition(TriggerExpression(self._exp, point))
         return cpre
 
-    def get_expression(self, point: 'PointBase') -> ExpressionList:
-        """Return the expression as a string.
-
-        Args:
-            point: The cycle point at which to generate the expression
-                string for.
-
-        Return:
-            The expression as a parsable string in the cylc graph format.
-
-        """
-        # return ''.join(self._stringify_list(self._exp, point))
-        return ExpressionList(self._exp, point)
-
-    def __str__(self):
+    def __str__(self) -> str:
         ret = []
         if self.suicide:
             ret.append('!')
@@ -276,3 +357,6 @@ class Dependency:
             else:
                 ret.append('( %s )' % str(item))
         return ' '.join(ret)
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} '{self}'>"

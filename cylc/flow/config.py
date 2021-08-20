@@ -1576,7 +1576,7 @@ class WorkflowConfig:
         # Convert expression to a (nested) list.
         try:
             expr_list = listify(lexpression)
-        except SyntaxError:
+        except SyntaxError: # TODO: never raised?
             raise WorkflowConfigError('Error in expression "%s"' % lexpression)
 
         triggers = {}
