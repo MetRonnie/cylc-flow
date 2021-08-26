@@ -56,6 +56,6 @@ jobs:
         uses: MetRonnie/release-actions/stage-1/create-release-pr@badges
         with:
           message: (Testing)
-          gh-actions-workflows: test_fast.yml, test_functional.yml, bash.yml, test_manylinux.yml
+          gh-actions-workflows: test_fast.yml, test_functional.yml, horse.yml, test_manylinux.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
