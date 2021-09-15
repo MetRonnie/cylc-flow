@@ -21,7 +21,7 @@ from fnmatch import fnmatchcase
 import logging
 import queue
 from time import time
-from typing import Iterable, Optional, Tuple, TYPE_CHECKING
+from typing import Iterable, List, Optional, Tuple, TYPE_CHECKING, Union
 from uuid import uuid4
 
 from graphene.utils.str_converters import to_snake_case
@@ -454,9 +454,10 @@ class Resolvers(BaseResolvers):
         self.schd = schd
 
     # Mutations
-    async def mutator(self, *m_args):
+    async def mutator(
+        self, _, command: str, w_args: dict, args: dict
+    ) -> Union[List[dict], str]:
         """Mutate workflow."""
-        _, command, w_args, args = m_args
         w_ids = [flow[WORKFLOW].id
                  for flow in await self.get_workflows_data(w_args)]
         if not w_ids:
@@ -735,7 +736,7 @@ class Resolvers(BaseResolvers):
 
     def stop(
         self,
-        mode: 'StopMode',
+        mode: Union[str, 'StopMode'],
         cycle_point: Optional[str] = None,
         clock_time: Optional[str] = None,
         task: Optional[str] = None,

@@ -14,14 +14,16 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from typing import Callable
+import logging
 import pytest
+from typing import Callable
 from unittest.mock import Mock
 
 from cylc.flow.data_store_mgr import ID_DELIM, EDGES, TASK_PROXIES
 from cylc.flow.network.resolvers import Resolvers
 from cylc.flow.network.schema import parse_node_id
 from cylc.flow.scheduler import Scheduler
+from cylc.flow.workflow_status import StopMode
 
 
 @pytest.fixture
@@ -51,7 +53,7 @@ def node_args():
 async def mock_flow(
     mod_flow: Callable[..., str],
     mod_scheduler: Callable[..., Scheduler]
-) -> Scheduler:
+) -> Mock:
     ret = Mock()
     ret.reg = mod_flow({
         'scheduler': {
@@ -209,3 +211,25 @@ async def test_mutation_mapper(mock_flow):
     """Test the mapping of mutations to internal command methods."""
     response = await mock_flow.resolvers._mutation_mapper('pause', {})
     assert response is not None
+
+
+@pytest.mark.asyncio
+async def test_stop_resolver(
+    one: Scheduler, run: Callable, log_filter: Callable,
+):
+    """Test the stop method."""
+    async with run(one) as log:
+        resolvers = Resolvers(
+            one.data_store_mgr,
+            schd=one
+        )
+        resolvers.stop(StopMode.REQUEST_CLEAN)
+        one.process_command_queue()
+        assert log_filter(
+            log, level=logging.INFO, contains="Command succeeded: stop"
+        )
+        assert one.stop_mode == StopMode.REQUEST_CLEAN
+
+    # FIXME why does this break when run with the others?
+    # INFO    Command succeeded: stop(mode=StopMode.REQUEST_CLEAN)
+    # INFO    Workflow shutting down - REQUEST(NOW-NOW)

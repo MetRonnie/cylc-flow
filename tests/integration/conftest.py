@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 import re
 from shutil import rmtree
-from typing import List, TYPE_CHECKING, Tuple
+from typing import List, TYPE_CHECKING, Optional, Tuple
 
 from cylc.flow.cfgspec.glbl_cfg import glbl_cfg
 from cylc.flow.pathutil import get_cylc_run_dir
@@ -200,6 +200,7 @@ def mod_one_conf():
 
 @pytest.fixture
 def one(one_conf, flow, scheduler):
+    """Return a Scheduler for the simple "R1 = one" graph."""
     reg = flow(one_conf)
     schd = scheduler(reg)
     return schd
@@ -214,7 +215,22 @@ def mod_one(mod_one_conf, mod_flow, mod_scheduler):
 
 @pytest.fixture
 def log_filter():
-    def _log_filter(log, name=None, level=None, contains=None, regex=None):
+    """Filter caplog record_tuples.
+
+    Args:
+        log: The caplog instance.
+        name: Filter out records if they don't match this logger name.
+        level: Filter out records if they aren't at this logging level.
+        contains: Filter out records if this string is not in the message.
+        regex: Filter out records if the message doesn't match this regex.
+    """
+    def _log_filter(
+        log: pytest.LogCaptureFixture,
+        name: Optional[str] = None,
+        level: Optional[int] = None,
+        contains: Optional[str] = None,
+        regex: Optional[str] = None
+    ) -> List[Tuple[str, int, str]]:
         return [
             (log_name, log_level, log_message)
             for log_name, log_level, log_message in log.record_tuples
