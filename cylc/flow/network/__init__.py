@@ -18,6 +18,7 @@
 import asyncio
 import getpass
 import json
+from typing import Any, Dict
 
 import zmq
 import zmq.asyncio
@@ -44,7 +45,7 @@ API = 5  # cylc API version
 MSG_TIMEOUT = "TIMEOUT"
 
 
-def encode_(message):
+def encode_(message: object) -> str:
     """Convert the structure holding a message field from JSON to a string."""
     try:
         return json.dumps(message)
@@ -52,9 +53,11 @@ def encode_(message):
         return json.dumps({'errors': [{'message': str(exc)}]})
 
 
-def decode_(message):
+def decode_(message: str) -> Dict[str, Any]:
     """Convert an encoded message string to JSON with an added 'user' field."""
-    msg = json.loads(message)
+    msg: object = json.loads(message)
+    if not isinstance(msg, dict):
+        raise ValueError(f"Expected message to be dict but got {type(msg)}")
     msg['user'] = getpass.getuser()  # assume this is the user
     return msg
 

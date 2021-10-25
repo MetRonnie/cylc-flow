@@ -52,7 +52,7 @@ class WorkflowReplier(ZMQSocketBase):
         self.workflow = server.schd.workflow
         self.queue = Queue()
 
-    def _bespoke_stop(self):
+    def _bespoke_stop(self) -> None:
         """Stop the listener and Authenticator.
 
         Overwrites Base method.
@@ -62,7 +62,7 @@ class WorkflowReplier(ZMQSocketBase):
         if self.queue is not None:
             self.queue.put('STOP')
 
-    def listener(self):
+    def listener(self) -> None:
         """The server main loop, listen for and serve requests.
 
         When called, this method will receive and respond until there are no
