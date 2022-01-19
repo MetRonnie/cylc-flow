@@ -18,14 +18,27 @@
 
 import math
 import re
+from typing import (
+    Dict, List, NamedTuple, Optional, TYPE_CHECKING, Union
+)
 
 from cylc.flow.cycling.loader import get_point
-from cylc.flow.exceptions import TriggerExpressionError
 from cylc.flow.data_messages_pb2 import (  # type: ignore
     PbPrerequisite,
     PbCondition,
 )
+from cylc.flow.exceptions import TriggerExpressionError
 from cylc.flow.id import Tokens
+
+if TYPE_CHECKING:
+    from cylc.flow.cycling import PointBase
+
+
+class MessageTuple(NamedTuple):
+    """Subcomponent of a Prerequisite"""
+    point: str
+    name: str
+    output: str
 
 
 class Prerequisite:
@@ -53,44 +66,52 @@ class Prerequisite:
     DEP_STATE_OVERRIDDEN = 'force satisfied'
     DEP_STATE_UNSATISFIED = False
 
-    def __init__(self, point, start_point=None):
+    def __init__(
+        self,
+        point: 'PointBase',
+        start_point: Optional['PointBase'] = None
+    ) -> None:
         # The cycle point to which this prerequisite belongs.
-        # cylc.flow.cycling.PointBase
-        self.point = point
+        self.point: 'PointBase' = point
 
         # Start point for prerequisite validity.
-        # cylc.flow.cycling.PointBase
-        self.start_point = start_point
+        self.start_point: Optional['PointBase'] = start_point
 
         # List of cycle point strings that this prerequisite depends on.
-        self.target_point_strings = []
+        self.target_point_strings: List[str] = []
 
         # Dictionary of messages pertaining to this prerequisite.
         # {('point string', 'task name', 'output'): DEP_STATE_X, ...}
-        self.satisfied = {}
+        self.satisfied: Dict[MessageTuple, Union[str, bool]] = {}
 
         # Expression present only when conditions are used.
         # '1/foo failed & 1/bar succeeded'
-        self.conditional_expression = None
+        self.conditional_expression: Optional[str] = None
 
         # The cached state of this prerequisite:
         # * `None` (no cached state)
         # * `True` (prerequisite satisfied)
         # * `False` (prerequisite unsatisfied).
-        self._all_satisfied = None
+        self._all_satisfied: Optional[bool] = None
 
-    def add(self, name, point, output, pre_initial=False):
+    def add(
+        self,
+        name: str,
+        point: Union['PointBase', str],
+        output: str,
+        pre_initial: bool = False
+    ) -> None:
         """Register an output with this prerequisite.
 
         Args:
-            name (str): The name of the task to which the output pertains.
-            point (str/cylc.flow.cycling.PointBase): The cycle point at which
-                this dependent output should appear.
-            output (str): String representing the output e.g. "succeeded".
-            pre_initial (bool): this is a pre-initial dependency.
+            name: The name of the task to which the output pertains.
+            point: The cycle point at which this dependent output
+                should appear.
+            output: String representing the output e.g. "succeeded".
+            pre_initial: If this is a pre-initial dependency.
 
         """
-        message = (str(point), name, output)
+        message = MessageTuple(str(point), name, output)
 
         # Add a new prerequisite as satisfied if pre-initial, else unsatisfied.
         if pre_initial:
@@ -102,7 +123,7 @@ class Prerequisite:
         if point and str(point) not in self.target_point_strings:
             self.target_point_strings.append(str(point))
 
-    def get_raw_conditional_expression(self):
+    def get_raw_conditional_expression(self) -> Optional[str]:
         """Return a representation of this prereq as a string.
 
         Returns None if this prerequisite is not a conditional one.
@@ -116,7 +137,7 @@ class Prerequisite:
                                 self.MESSAGE_TEMPLATE % message)
         return expr
 
-    def set_condition(self, expr):
+    def set_condition(self, expr: str) -> None:
         """Set the conditional expression for this prerequisite.
         Resets the cached state (self._all_satisfied).
 
@@ -150,7 +171,7 @@ class Prerequisite:
 
             self.conditional_expression = expr
 
-    def is_satisfied(self):
+    def is_satisfied(self) -> bool:
         """Return True if prerequisite is satisfied.
 
         Return cached state if present, else evaluate the prerequisite.

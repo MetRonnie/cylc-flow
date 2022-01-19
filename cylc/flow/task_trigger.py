@@ -275,7 +275,7 @@ class Dependency:
                     )
                 )
             elif isinstance(item, list):
-                ret.extend(['('] + cls._stringify_list(item, point) + [')'])
+                ret.extend(['(', cls._stringify_list(item, point), ')'])
             else:
                 ret.append(item)
         return ret
