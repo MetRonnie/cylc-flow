@@ -217,7 +217,7 @@ class WorkflowRuntimeClient(ZMQSocketBase):
             return response.content
         if response.err:
             raise ClientError(*response.err)
-        raise ClientError(f"Received invalid response: {response}")
+        raise ClientError("No response from server. Check the workflow log.")
 
     def serial_request(
         self,

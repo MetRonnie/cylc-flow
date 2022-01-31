@@ -382,20 +382,6 @@ class WorkflowRuntimeServer:
             )
         except Exception as exc:
             raise GraphQLError(f"ERROR: GraphQL execution error \n{exc}")
-        if executed.errors:
-            for i, excp in enumerate(executed.errors):
-                if isinstance(excp, GraphQLError):
-                    error = excp
-                else:
-                    error = GraphQLError(message=str(excp))
-                if hasattr(excp, '__traceback__'):
-                    import traceback
-                    extensions = error.extensions or {}
-                    extensions['traceback'] = traceback.format_exception(
-                        excp.__class__, excp, excp.__traceback__
-                    )
-                    error.extensions = extensions
-                executed.errors[i] = error
         return format_execution_result(executed)
 
     # UIServer Data Commands

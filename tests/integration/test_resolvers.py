@@ -217,7 +217,7 @@ async def test_mutation_mapper(mock_flow):
     """Test the mapping of mutations to internal command methods."""
     meta = {}
     response = await mock_flow.resolvers._mutation_mapper('pause', {}, meta)
-    assert response is None
+    assert response == (True, 'Command queued')
     with pytest.raises(ValueError):
         await mock_flow.resolvers._mutation_mapper('non_exist', {}, meta)
 
