@@ -48,6 +48,10 @@ using `pip`.)
 [#4745](https://github.com/cylc/cylc-flow/pull/4745) - Fix traceback when
 running `cylc help all` without optional dependencies installed.
 
+[#4737](https://github.com/cylc/cylc-flow/pull/4737) -
+Fix issue which prevented tasks with incomplete outputs from being rerun by
+subsequent flows.
+
 [#4670](https://github.com/cylc/cylc-flow/pull/4670) - Fix several TUI bugs.
 
 [#4730](https://github.com/cylc/cylc-flow/pull/4730) - Fix bug on the command
