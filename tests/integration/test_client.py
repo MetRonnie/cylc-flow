@@ -37,7 +37,7 @@ async def test_graphql(harness):
         'graphql',
         {'request_string': 'query { workflows { id } }'}
     )
-    workflows = ret['workflows']
+    workflows = ret['data']['workflows']
     assert len(workflows) == 1
     workflow = workflows[0]
     assert schd.workflow in workflow['id']

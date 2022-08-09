@@ -28,6 +28,7 @@ from typing import (
     Any,
     List,
     Optional,
+    Type,
 )
 
 import graphene
@@ -1187,9 +1188,22 @@ class Queries(ObjectType):
 # Generic containers
 class GenericResponse(ObjectType):
     class Meta:
-        description = """Container for command queued response"""
+        description = """Container for workflow command queued response"""
 
-    result = GenericScalar()
+    workflowId = String()
+    success = Boolean(required=True)
+    message = String(required=True)
+
+    # Define __init__ for benefit of static type checking:
+    def __init__(
+        self,
+        workflowId: Optional[str] = None,
+        success: Optional[bool] = None,
+        message: Optional[str] = None
+    ):
+        # Note: all args optional here to allow for not requesting them in a
+        # mutation
+        ObjectType.__init__(self, workflowId, success, message)
 
 
 # Mutators are used to call the internals of the parent program in the
@@ -1207,7 +1221,7 @@ async def mutator(
     workflows: Optional[List[str]] = None,
     exworkflows: Optional[List[str]] = None,
     **kwargs: Any
-) -> GenericResponse:
+) -> List[GenericResponse]:
     """Call the resolver method that act on the workflow service
     via the internal command queue.
 
@@ -1239,7 +1253,9 @@ async def mutator(
     )
     meta = info.context.get('meta')  # type: ignore[union-attr]
     res = await resolvers.mutator(info, command, w_args, kwargs, meta)
-    return GenericResponse(result=res)
+    return info.return_type.graphene_type(  # type: ignore[union-attr]
+        results=res
+    )
 
 
 # Input types:
@@ -1409,7 +1425,15 @@ class Flow(String):
 
 # Mutations:
 
-class Broadcast(Mutation):
+class WorkflowsMutation:
+    """Base class for mutations involving workflows."""
+    class Arguments:
+        workflows = graphene.List(WorkflowID, required=True)
+
+    results = graphene.List(GenericResponse)
+
+
+class Broadcast(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Override `[runtime]` configurations in a running workflow.
@@ -1444,9 +1468,7 @@ class Broadcast(Mutation):
         ''')
         resolver = partial(mutator, command='broadcast')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
-
+    class Arguments(WorkflowsMutation.Arguments):
         mode = BroadcastMode(
             # use the enum name as the default value
             # https://github.com/graphql-python/graphql-core-legacy/issues/166
@@ -1492,10 +1514,8 @@ class Broadcast(Mutation):
         #    ''')
         # )
 
-    result = GenericScalar()
 
-
-class SetHoldPoint(Mutation):
+class SetHoldPoint(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Set workflow hold after cycle point. All tasks after this point
@@ -1503,17 +1523,14 @@ class SetHoldPoint(Mutation):
         ''')
         resolver = partial(mutator, command='set_hold_point')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
+    class Arguments(WorkflowsMutation.Arguments):
         point = CyclePoint(
             description='Hold all tasks after the specified cycle point.',
             required=True
         )
 
-    result = GenericScalar()
 
-
-class Pause(Mutation):
+class Pause(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Pause a workflow.
@@ -1522,13 +1539,8 @@ class Pause(Mutation):
         ''')
         resolver = partial(mutator, command='pause')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
 
-    result = GenericScalar()
-
-
-class Message(Mutation):
+class Message(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Record task job messages.
@@ -1545,8 +1557,7 @@ class Message(Mutation):
         ''')
         resolver = partial(mutator, command='put_messages')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
+    class Arguments(WorkflowsMutation.Arguments):
         task_job = String(required=True)
         event_time = String(default_value=None)
         messages = graphene.List(
@@ -1555,10 +1566,8 @@ class Message(Mutation):
             default_value=None
         )
 
-    result = GenericScalar()
 
-
-class ReleaseHoldPoint(Mutation):
+class ReleaseHoldPoint(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Release all tasks and unset the workflow hold point, if set.
@@ -1567,13 +1576,8 @@ class ReleaseHoldPoint(Mutation):
         ''')
         resolver = partial(mutator, command='release_hold_point')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
 
-    result = GenericScalar()
-
-
-class Resume(Mutation):
+class Resume(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Resume a paused workflow.
@@ -1582,13 +1586,8 @@ class Resume(Mutation):
         ''')
         resolver = partial(mutator, command='resume')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
 
-    result = GenericScalar()
-
-
-class Reload(Mutation):
+class Reload(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Reload the configuration of a running workflow.
@@ -1608,13 +1607,8 @@ class Reload(Mutation):
         ''')
         resolver = partial(mutator, command='reload_workflow')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
 
-    result = GenericScalar()
-
-
-class SetVerbosity(Mutation):
+class SetVerbosity(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Change the logging severity level of a running workflow.
@@ -1625,14 +1619,11 @@ class SetVerbosity(Mutation):
         ''')
         resolver = partial(mutator, command='set_verbosity')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
+    class Arguments(WorkflowsMutation.Arguments):
         level = LogLevels(required=True)
 
-    result = GenericScalar()
 
-
-class SetGraphWindowExtent(Mutation):
+class SetGraphWindowExtent(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Set the maximum graph distance (n) from an active node
@@ -1641,14 +1632,11 @@ class SetGraphWindowExtent(Mutation):
         ''')
         resolver = partial(mutator, command='set_graph_window_extent')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
+    class Arguments(WorkflowsMutation.Arguments):
         n_edge_distance = Int(required=True)
 
-    result = GenericScalar()
 
-
-class Stop(Mutation):
+class Stop(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip(f'''
             Tell a workflow to shut down or stop a specified
@@ -1666,8 +1654,7 @@ class Stop(Mutation):
         ''')
         resolver = partial(mutator, command='stop')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
+    class Arguments(WorkflowsMutation.Arguments):
         mode = WorkflowStopMode(
             default_value=WorkflowStopMode.Clean.name
         )
@@ -1684,10 +1671,8 @@ class Stop(Mutation):
             description='Number of flow to stop.'
         )
 
-    result = GenericScalar()
 
-
-class ExtTrigger(Mutation):
+class ExtTrigger(Mutation, WorkflowsMutation):
     class Meta:
         description = sstrip('''
             Report an external event message to a scheduler.
@@ -1714,8 +1699,7 @@ class ExtTrigger(Mutation):
         ''')
         resolver = partial(mutator, command='put_ext_trigger')
 
-    class Arguments:
-        workflows = graphene.List(WorkflowID, required=True)
+    class Arguments(WorkflowsMutation.Arguments):
         message = String(
             description='External trigger message.',
             required=True
@@ -1725,21 +1709,11 @@ class ExtTrigger(Mutation):
             required=True
         )
 
-    result = GenericScalar()
 
-
-class TaskMutation:
-    class Arguments:
-        workflows = graphene.List(
-            WorkflowID,
-            required=True
-        )
-        tasks = graphene.List(
-            NamespaceIDGlob,
-            required=True
-        )
-
-    result = GenericScalar()
+class TasksMutation(WorkflowsMutation):
+    """Base class for mutations involving tasks."""
+    class Arguments(WorkflowsMutation.Arguments):
+        tasks = graphene.List(NamespaceIDGlob, required=True)
 
 
 class FlowMutationArguments:
@@ -1763,7 +1737,7 @@ class FlowMutationArguments:
     )
 
 
-class Hold(Mutation, TaskMutation):
+class Hold(Mutation, TasksMutation):
     class Meta:
         description = sstrip('''
             Hold tasks within a workflow.
@@ -1773,7 +1747,7 @@ class Hold(Mutation, TaskMutation):
         resolver = partial(mutator, command='hold')
 
 
-class Release(Mutation, TaskMutation):
+class Release(Mutation, TasksMutation):
     class Meta:
         description = sstrip('''
             Release held tasks within a workflow.
@@ -1783,7 +1757,7 @@ class Release(Mutation, TaskMutation):
         resolver = partial(mutator, command='release')
 
 
-class Kill(Mutation, TaskMutation):
+class Kill(Mutation, TasksMutation):
     # TODO: This should be a job mutation?
     class Meta:
         description = sstrip('''
@@ -1792,7 +1766,7 @@ class Kill(Mutation, TaskMutation):
         resolver = partial(mutator, command='kill_tasks')
 
 
-class Poll(Mutation, TaskMutation):
+class Poll(Mutation, TasksMutation):
     class Meta:
         description = sstrip('''
             Poll (query) task jobs to verify and update their statuses.
@@ -1806,11 +1780,8 @@ class Poll(Mutation, TaskMutation):
         ''')
         resolver = partial(mutator, command='poll_tasks')
 
-    class Arguments(TaskMutation.Arguments):
-        ...
 
-
-class Remove(Mutation, TaskMutation):
+class Remove(Mutation, TasksMutation):
     class Meta:
         description = sstrip('''
             Remove one or more task instances from a running workflow.
@@ -1819,7 +1790,7 @@ class Remove(Mutation, TaskMutation):
         resolver = partial(mutator, command='remove_tasks')
 
 
-class SetOutputs(Mutation, TaskMutation):
+class SetOutputs(Mutation, TasksMutation):
     class Meta:
         description = sstrip('''
             Artificially mark task outputs as completed.
@@ -1831,7 +1802,7 @@ class SetOutputs(Mutation, TaskMutation):
         ''')
         resolver = partial(mutator, command='force_spawn_children')
 
-    class Arguments(TaskMutation.Arguments):
+    class Arguments(TasksMutation.Arguments):
         outputs = graphene.List(
             String,
             default_value=[TASK_OUTPUT_SUCCEEDED],
@@ -1840,7 +1811,7 @@ class SetOutputs(Mutation, TaskMutation):
         flow_num = Int()
 
 
-class Trigger(Mutation, TaskMutation):
+class Trigger(Mutation, TasksMutation):
     class Meta:
         description = sstrip('''
             Manually trigger tasks.
@@ -1853,7 +1824,7 @@ class Trigger(Mutation, TaskMutation):
         ''')
         resolver = partial(mutator, command='force_trigger_tasks')
 
-    class Arguments(TaskMutation.Arguments, FlowMutationArguments):
+    class Arguments(TasksMutation.Arguments, FlowMutationArguments):
         flow_wait = Boolean(
             default_value=False,
             description=sstrip('''
@@ -1879,17 +1850,13 @@ class Trigger(Mutation, TaskMutation):
         )
 
 
-def _mut_field(cls):
+def _mut_field(cls: Type[Mutation]) -> Field:
     """Convert a mutation class into a field.
 
     Sets the field metadata appropriately.
 
     Args:
-        field (class):
-            Subclass of graphene.Mutation
-
-    Returns:
-        graphene.Field
+        cls: Subclass of graphene.Mutation
 
     """
     return cls.Field(description=cls._meta.description)
