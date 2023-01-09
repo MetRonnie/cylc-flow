@@ -79,7 +79,7 @@ class ISO8601Point(PointBase):
     TYPE = CYCLER_TYPE_ISO8601
     TYPE_SORT_KEY = CYCLER_TYPE_SORT_KEY_ISO8601
 
-    __slots__ = ('value')
+    __slots__ = ()
 
     @classmethod
     def from_nonstandard_string(cls, point_string):
@@ -159,7 +159,7 @@ class ISO8601Interval(IntervalBase):
     TYPE = CYCLER_TYPE_ISO8601
     TYPE_SORT_KEY = CYCLER_TYPE_SORT_KEY_ISO8601
 
-    __slots__ = ('value')
+    __slots__ = ()
 
     @classmethod
     def get_null(cls):

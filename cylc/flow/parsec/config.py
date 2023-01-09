@@ -268,7 +268,7 @@ class ConfigNode(ContextNode):
 
     UNSET = '*value unset*'
 
-    __slots__ = ContextNode.__slots__ + (
+    __slots__ = (
         'vdr', 'options', 'default', 'desc', 'display_name', 'meta'
     )
 

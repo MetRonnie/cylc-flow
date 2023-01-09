@@ -231,30 +231,29 @@ class WorkflowDatabaseManager:
             return
         # Record workflow parameters and tasks in pool
         # Record any broadcast settings to be dumped out
-        if any(self.db_deletes_map.values()):
-            for table_name, db_deletes in sorted(
-                    self.db_deletes_map.items()):
-                while db_deletes:
-                    where_args = db_deletes.pop(0)
-                    self.pri_dao.add_delete_item(table_name, where_args)
-                    self.pub_dao.add_delete_item(table_name, where_args)
-        if any(self.db_inserts_map.values()):
-            for table_name, db_inserts in sorted(
-                    self.db_inserts_map.items()):
-                while db_inserts:
-                    db_insert = db_inserts.pop(0)
-                    self.pri_dao.add_insert_item(table_name, db_insert)
-                    self.pub_dao.add_insert_item(table_name, db_insert)
-        if (hasattr(self, 'db_updates_map') and
-                any(self.db_updates_map.values())):
-            for table_name, db_updates in sorted(
-                    self.db_updates_map.items()):
-                while db_updates:
-                    set_args, where_args = db_updates.pop(0)
-                    self.pri_dao.add_update_item(
-                        table_name, set_args, where_args)
-                    self.pub_dao.add_update_item(
-                        table_name, set_args, where_args)
+        for table_name, db_deletes in sorted(
+            self.db_deletes_map.items()
+        ):
+            while db_deletes:
+                where_args = db_deletes.pop(0)
+                self.pri_dao.add_delete_item(table_name, where_args)
+                self.pub_dao.add_delete_item(table_name, where_args)
+        for table_name, db_inserts in sorted(
+            self.db_inserts_map.items()
+        ):
+            while db_inserts:
+                db_insert = db_inserts.pop(0)
+                self.pri_dao.add_insert_item(table_name, db_insert)
+                self.pub_dao.add_insert_item(table_name, db_insert)
+        for table_name, db_updates in sorted(
+            getattr(self, 'db_updates_map', {}).items()
+        ):
+            while db_updates:
+                set_args, where_args = db_updates.pop(0)
+                self.pri_dao.add_update_item(
+                    table_name, set_args, where_args)
+                self.pub_dao.add_update_item(
+                    table_name, set_args, where_args)
 
         # Previously, we used a separate thread for database writes. This has
         # now been removed. For the private database, there is no real

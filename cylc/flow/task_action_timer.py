@@ -17,9 +17,13 @@
 """Timer for task actions."""
 
 from time import time
+from typing import (
+    Any, Iterable, List, Optional, SupportsFloat, SupportsInt
+)
 
 from cylc.flow.wallclock import (
-    get_seconds_as_interval_string, get_time_string_from_unix_time)
+    get_seconds_as_interval_string, get_time_string_from_unix_time
+)
 
 
 class TimerFlags:
@@ -31,12 +35,20 @@ class TimerFlags:
 class TaskActionTimer:
     """A timer with delays for task actions."""
 
-    # Memory optimization - constrain possible attributes to this list.
-    __slots__ = ["ctx", "delays", "num", "delay", "timeout", "is_waiting"]
+    delays: List[float]
 
-    def __init__(self, ctx=None, delays=None, num=0, delay=None, timeout=None):
+    # Memory optimization - constrain possible attributes to this list.
+    __slots__ = ("ctx", "delays", "num", "delay", "timeout", "is_waiting")
+
+    def __init__(
+        self,
+        ctx: Any = None,
+        delays: Optional[Iterable[SupportsFloat]] = None,
+        num: SupportsInt = 0,
+        delay: Optional[SupportsFloat] = None,
+        timeout: Optional[SupportsFloat] = None
+    ):
         self.ctx = ctx
-        self.delays = None
         self.set_delays(delays)
         self.num = int(num)
         if delay is not None:
@@ -89,7 +101,9 @@ class TaskActionTimer:
         self.timeout = None
         self.is_waiting = False
 
-    def set_delays(self, delays=None):
+    def set_delays(
+        self, delays: Optional[Iterable[SupportsFloat]] = None
+    ) -> None:
         """Set delays, ensuring that the values are floats."""
         if delays is None:
             self.delays = [float(0)]

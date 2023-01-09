@@ -124,7 +124,7 @@ class IntegerPoint(PointBase):
     TYPE = CYCLER_TYPE_INTEGER
     TYPE_SORT_KEY = CYCLER_TYPE_SORT_KEY_INTEGER
 
-    __slots__ = ('value')
+    __slots__ = ()
 
     def __init__(self, value):
         if isinstance(value, int):
@@ -165,7 +165,7 @@ class IntegerInterval(IntervalBase):
     TYPE = CYCLER_TYPE_INTEGER
     TYPE_SORT_KEY = CYCLER_TYPE_SORT_KEY_INTEGER
 
-    __slots__ = ('value')
+    __slots__ = ()
 
     @classmethod
     def from_integer(cls, integer):
@@ -229,7 +229,7 @@ class IntegerExclusions(ExclusionBase):
     """A collection of integer exclusion points, or sequences of
     integers that are treated in an exclusionary manner."""
 
-    __slots__ = ExclusionBase.__slots__
+    __slots__ = ()
 
     def __init__(self, excl_points, start_point, end_point=None):
         """creates an exclusions object that can contain integer points

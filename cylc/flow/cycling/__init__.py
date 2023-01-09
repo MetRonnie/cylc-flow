@@ -63,7 +63,7 @@ class PointBase(metaclass=ABCMeta):
 
     """
 
-    __slots__ = ('value')
+    __slots__ = ('value',)
 
     @property
     @abstractmethod
@@ -186,7 +186,7 @@ class IntervalBase(metaclass=ABCMeta):
 
     """
 
-    __slots__ = ('value')
+    __slots__ = ('value',)
 
     @property
     @abstractmethod
