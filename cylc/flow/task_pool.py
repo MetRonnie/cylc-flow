@@ -453,137 +453,151 @@ class TaskPool:
             # no matching entries
             return False
 
-    def load_db_task_pool_for_restart(self, row_idx, row):
+    def load_db_task_pool_for_restart(self) -> None:
         """Load tasks from DB task pool/states/jobs tables.
 
         Output completion status is loaded from the DB, and tasks recorded
         as submitted or running are polled to confirm their true status.
         Tasks are added to queues again on release from runahead pool.
 
-        Returns:
-            Names of platform if attempting to look up that platform
-            has led to a PlatformNotFoundError.
+        Raises:
+            PlatformLookupError: Do not start up if platforms for running
+            tasks cannot be found in global.cylc. This exception should
+            not be caught.
         """
-        if row_idx == 0:
-            LOG.info("LOADING task proxies")
-        # Create a task proxy corresponding to this DB entry.
-        (cycle, name, flow_nums, flow_wait, is_manual_submit, is_late, status,
-         is_held, submit_num, _, platform_name, time_submit, time_run, timeout,
-         outputs_str) = row
-        try:
-            itask = TaskProxy(
-                self.tokens,
-                self.config.get_taskdef(name),
-                get_point(cycle),
-                deserialise(flow_nums),
-                status=status,
-                is_held=is_held,
-                submit_num=submit_num,
-                is_late=bool(is_late),
-                flow_wait=bool(flow_wait),
-                is_manual_submit=bool(is_manual_submit)
-            )
-
-        except WorkflowConfigError:
-            LOG.exception(
-                f'ignoring task {name} from the workflow run database\n'
-                '(its task definition has probably been deleted).')
-        except Exception:
-            LOG.exception(f'could not load task {name}')
-        else:
-            if status in (
-                    TASK_STATUS_SUBMITTED,
-                    TASK_STATUS_RUNNING,
-                    TASK_STATUS_FAILED,
-                    TASK_STATUS_SUCCEEDED
-            ):
-                # update the task proxy with platform
-                # If we get a failure from the platform selection function
-                # set task status to submit-failed.
-                try:
-                    itask.platform = get_platform(platform_name)
-                except PlatformLookupError:
-                    return platform_name
-
-                if time_submit:
-                    itask.set_summary_time('submitted', time_submit)
-                if time_run:
-                    itask.set_summary_time('started', time_run)
-                if timeout is not None:
-                    itask.timeout = timeout
-            elif status == TASK_STATUS_PREPARING:
-                # put back to be readied again.
-                status = TASK_STATUS_WAITING
-                # Re-prepare same submit.
-                itask.submit_num -= 1
-
-            # Running or finished task can have completed custom outputs.
-            if itask.state(
-                    TASK_STATUS_RUNNING,
-                    TASK_STATUS_FAILED,
-                    TASK_STATUS_SUCCEEDED
-            ):
-                for message in json.loads(outputs_str):
-                    itask.state.outputs.set_completion(message, True)
-                    self.data_store_mgr.delta_task_output(itask, message)
-
-            if platform_name and status != TASK_STATUS_WAITING:
-                itask.summary['platforms_used'][
-                    int(submit_num)] = platform_name
-            LOG.info(
-                f"+ {cycle}/{name} {status}{' (held)' if is_held else ''}")
-
-            # Update prerequisite satisfaction status from DB
-            sat = {}
-            for prereq_name, prereq_cycle, prereq_output, satisfied in (
-                    self.workflow_db_mgr.pri_dao.select_task_prerequisites(
-                        cycle,
-                        name,
-                        flow_nums,
-                    )
-            ):
-                # Prereq satisfaction as recorded in the DB.
-                sat[
-                    (prereq_cycle, prereq_name, prereq_output)
-                ] = satisfied if satisfied != '0' else False
-
-            for itask_prereq in itask.state.prerequisites:
-                for key in itask_prereq.satisfied.keys():
-                    try:
-                        itask_prereq.satisfied[key] = sat[key]
-                    except KeyError:
-                        # This prereq is not in the DB: new dependencies
-                        # added to an already-spawned task before restart.
-                        # Look through task outputs to see if is has been
-                        # satisfied
-                        prereq_cycle, prereq_task, prereq_output = key
-                        itask_prereq.satisfied[key] = (
-                            self.check_task_output(
-                                prereq_cycle,
-                                prereq_task,
-                                prereq_output,
-                                itask.flow_nums,
-                            )
-                        )
-
-            if itask.state_reset(status, is_runahead=True):
-                self.data_store_mgr.delta_task_runahead(itask)
-            self.add_to_pool(itask)
-
-            # All tasks load as runahead-limited, but finished and manually
-            # triggered tasks (incl. --start-task's) can be released now.
-            if (
-                itask.state(
-                    TASK_STATUS_FAILED,
-                    TASK_STATUS_SUCCEEDED,
-                    TASK_STATUS_EXPIRED
+        LOG.info("LOADING task proxies")
+        bad_platforms: Set[str] = set()
+        for (
+            cycle, name, flow_nums, flow_wait, is_manual_submit, is_late,
+            status, is_held, submit_num, _, platform_name, time_submit,
+            time_run, timeout, outputs_str
+        ) in self.workflow_db_mgr.pri_dao.select_task_pool_for_restart():
+            # Create a task proxy corresponding to this DB entry.
+            try:
+                itask = TaskProxy(
+                    self.tokens,
+                    self.config.get_taskdef(name),
+                    get_point(cycle),
+                    deserialise(flow_nums),
+                    status=status,
+                    is_held=is_held,
+                    submit_num=submit_num,
+                    is_late=bool(is_late),
+                    flow_wait=bool(flow_wait),
+                    is_manual_submit=bool(is_manual_submit)
                 )
-                or itask.is_manual_submit
-            ):
-                self.rh_release_and_queue(itask)
 
-            self.compute_runahead()
-            self.release_runahead_tasks()
+            except WorkflowConfigError:
+                LOG.exception(
+                    f'ignoring task {name} from the workflow run database\n'
+                    '(its task definition has probably been deleted).')
+            except Exception:
+                LOG.exception(f'could not load task {name}')
+            else:
+                if status in (
+                        TASK_STATUS_SUBMITTED,
+                        TASK_STATUS_RUNNING,
+                        TASK_STATUS_FAILED,
+                        TASK_STATUS_SUCCEEDED
+                ):
+                    # update the task proxy with platform
+                    # If we get a failure from the platform selection function
+                    # set task status to submit-failed.
+                    try:
+                        itask.platform = get_platform(platform_name)
+                    except PlatformLookupError:
+                        bad_platforms.add(platform_name)
+                        continue
+
+                    if time_submit:
+                        itask.set_summary_time('submitted', time_submit)
+                    if time_run:
+                        itask.set_summary_time('started', time_run)
+                    if timeout is not None:
+                        itask.timeout = timeout
+                elif status == TASK_STATUS_PREPARING:
+                    # put back to be readied again.
+                    status = TASK_STATUS_WAITING
+                    # Re-prepare same submit.
+                    itask.submit_num -= 1
+
+                # Running or finished task can have completed custom outputs.
+                if itask.state(
+                        TASK_STATUS_RUNNING,
+                        TASK_STATUS_FAILED,
+                        TASK_STATUS_SUCCEEDED
+                ):
+                    for message in json.loads(outputs_str):
+                        itask.state.outputs.set_completion(message, True)
+                        self.data_store_mgr.delta_task_output(itask, message)
+
+                if platform_name and status != TASK_STATUS_WAITING:
+                    itask.summary['platforms_used'][
+                        int(submit_num)] = platform_name
+                LOG.info(
+                    f"+ {cycle}/{name} {status}{' (held)' if is_held else ''}")
+
+                # Update prerequisite satisfaction status from DB
+                sat = {}
+                for prereq_name, prereq_cycle, prereq_output, satisfied in (
+                        self.workflow_db_mgr.pri_dao.select_task_prerequisites(
+                            cycle,
+                            name,
+                            flow_nums,
+                        )
+                ):
+                    # Prereq satisfaction as recorded in the DB.
+                    sat[
+                        (prereq_cycle, prereq_name, prereq_output)
+                    ] = satisfied if satisfied != '0' else False
+
+                for itask_prereq in itask.state.prerequisites:
+                    for key in itask_prereq.satisfied.keys():
+                        try:
+                            itask_prereq.satisfied[key] = sat[key]
+                        except KeyError:
+                            # This prereq is not in the DB: new dependencies
+                            # added to an already-spawned task before restart.
+                            # Look through task outputs to see if is has been
+                            # satisfied
+                            prereq_cycle, prereq_task, prereq_output = key
+                            itask_prereq.satisfied[key] = (
+                                self.check_task_output(
+                                    prereq_cycle,
+                                    prereq_task,
+                                    prereq_output,
+                                    itask.flow_nums,
+                                )
+                            )
+
+                if itask.state_reset(status, is_runahead=True):
+                    self.data_store_mgr.delta_task_runahead(itask)
+                self.add_to_pool(itask)
+
+                # All tasks load as runahead-limited, but finished and manually
+                # triggered tasks (incl. --start-task's) can be released now.
+                if (
+                    itask.state(
+                        TASK_STATUS_FAILED,
+                        TASK_STATUS_SUCCEEDED,
+                        TASK_STATUS_EXPIRED
+                    )
+                    or itask.is_manual_submit
+                ):
+                    self.rh_release_and_queue(itask)
+
+                self.compute_runahead()
+                self.release_runahead_tasks()
+
+        # If any of the platforms could not be found, raise an exception
+        # and stop trying to play this workflow:
+        if bad_platforms:
+            bullet = '\n * '
+            raise PlatformLookupError(
+                "The following platforms are not defined in"
+                " the global.cylc file:"
+                f"{bullet}{bullet.join(bad_platforms)}"
+            )
 
     def load_db_task_action_timers(self, row_idx, row):
         """Load a task action timer, e.g. event handlers, retry states."""
