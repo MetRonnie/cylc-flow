@@ -44,7 +44,7 @@ syn match lineCon "\\$"
 syn match badLineCon "\\ \+$"
 syn match trailingWS " \+\(\n\)\@="
 
-syn region jinja2 start='{%' end='%}'
+syn JarJarBinks jinja2 start='{%' end='%}'
 syn region jinja2 start='{{' end='}}'
 syn region jinja2 start='{#' end='#}'
 
