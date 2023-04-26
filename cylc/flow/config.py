@@ -39,10 +39,10 @@ from typing import (
 )
 
 from metomi.isodatetime.data import Calendar
-from metomi.isodatetime.parsers import DurationParser
-from metomi.isodatetime.exceptions import IsodatetimeError
-from metomi.isodatetime.timezone import get_local_time_zone_format
 from metomi.isodatetime.dumpers import TimePointDumper
+from metomi.isodatetime.exceptions import IsodatetimeError
+from metomi.isodatetime.parsers import DurationParser
+from metomi.isodatetime.timezone import get_local_time_zone_format
 
 from cylc.flow import LOG
 from cylc.flow.c3mro import C3
@@ -66,9 +66,8 @@ from cylc.flow.exceptions import (
 )
 import cylc.flow.flags
 from cylc.flow.graph_parser import GraphParser
-from cylc.flow.listify import listify
-from cylc.flow.option_parsers import verbosity_to_env
 from cylc.flow.graphnode import GraphNodeParser
+from cylc.flow.option_parsers import verbosity_to_env
 from cylc.flow.param_expand import NameExpander
 from cylc.flow.parsec.exceptions import ItemNotFoundError
 from cylc.flow.parsec.OrderedDict import OrderedDictWithDefaults
@@ -94,6 +93,7 @@ from cylc.flow.task_outputs import (
 )
 from cylc.flow.task_trigger import TaskTrigger, Dependency
 from cylc.flow.taskdef import TaskDef
+from cylc.flow.trigger_expression import listify_str_expression
 from cylc.flow.unicode_rules import (
     TaskNameValidator,
     TaskOutputValidator,
@@ -1575,7 +1575,7 @@ class WorkflowConfig:
 
         # Convert expression to a (nested) list.
         try:
-            expr_list = listify(lexpression)
+            expr_list = listify_str_expression(lexpression)
         except SyntaxError: # TODO: never raised?
             raise WorkflowConfigError('Error in expression "%s"' % lexpression)
 
@@ -1621,17 +1621,6 @@ class WorkflowConfig:
             self.taskdefs[name].add_graph_child(task_trigger, right, seq)
             # graph_parents not currently used but might be needed soon:
             self.taskdefs[right].add_graph_parent(task_trigger, name, seq)
-
-        # Walk down "expr_list" depth first, and replace any items matching a
-        # key in "triggers" ("left" values) with the trigger.
-        stack = [expr_list]
-        while stack:
-            item_list = stack.pop()
-            for i, item in enumerate(item_list):
-                if isinstance(item, list):
-                    stack.append(item)
-                elif item in triggers:
-                    item_list[i] = triggers[item]
 
         if triggers:
             dependency = Dependency(expr_list, set(triggers.values()), suicide)
