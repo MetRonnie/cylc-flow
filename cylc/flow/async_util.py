@@ -21,7 +21,11 @@ from functools import partial, wraps
 from inspect import signature
 import os
 from pathlib import Path
-from typing import List, Union
+from typing import (
+    Any, AsyncGenerator, Callable, Iterable, List, Optional, Tuple, Union
+)
+
+import pyuv
 
 from cylc.flow import LOG
 
@@ -62,7 +66,7 @@ class _AsyncPipe:
 
     def __init__(
         self,
-        func,
+        func: Callable,
         args=None,
         kwargs=None,
         filter_stop=True,
@@ -76,13 +80,14 @@ class _AsyncPipe:
         self._left = None
         self._right = None
 
-    async def __aiter__(self):
+    async def __aiter__(self) -> AsyncGenerator:
         # aiter = async iter
         coros = self.__iter__()
         gen = next(coros)  # the generator we start the pipe with
         coros = list(coros)  # the coros to push data through
-        running = []  # list of running asyncio tasks
-        completed = asyncio.Queue()  # queue of processed items to yield
+        running: List[asyncio.Task] = []  # list of running asyncio tasks
+        # queue of processed items to yield:
+        completed: asyncio.Queue[Tuple[int, Any]] = asyncio.Queue()
         try:
             # run the generator
             running.append(
@@ -102,7 +107,11 @@ class _AsyncPipe:
             for task in running:
                 task.cancel()
 
-    async def _ordered(self, running, completed):
+    async def _ordered(
+        self,
+        running: List[asyncio.Task],
+        completed: asyncio.Queue[Tuple[int, Any]]
+    ):
         """The classic first-in first-out pipe behaviour."""
         cache = {}  # cache of results {index: result}
         skip_cache = []  # list of results which have been filtered out
@@ -133,7 +142,11 @@ class _AsyncPipe:
 
             await asyncio.sleep(0)  # don't allow this loop to block
 
-    async def _unordered(self, running, completed):
+    async def _unordered(
+        self,
+        running: List[asyncio.Task],
+        completed: asyncio.Queue[Tuple[int, Any]]
+    ):
         """The optimal yield items as they are processed behaviour."""
         while running or not completed.empty():
             # return any completed items
@@ -147,7 +160,13 @@ class _AsyncPipe:
 
             await asyncio.sleep(0)  # don't allow this loop to block
 
-    async def _generate(self, gen, coros, running, completed):
+    async def _generate(
+        self,
+        gen: '_AsyncPipe',
+        coros: Iterable['_AsyncPipe'],
+        running: List[asyncio.Task],
+        completed: asyncio.Queue[Tuple[int, Any]]
+    ):
         """Pull data out of the generator."""
         ind = 0
         async for item in gen.func(*gen.args, **gen.kwargs):
@@ -158,7 +177,12 @@ class _AsyncPipe:
             )
             ind += 1
 
-    async def _chain(self, item, coros, completed):
+    async def _chain(
+        self,
+        item,
+        coros: Iterable['_AsyncPipe'],
+        completed: asyncio.Queue[Tuple[int, Any]]
+    ) -> Optional[int]:
         """Push data through the coroutine pipe."""
         ind, item = item
         for coro in coros:
@@ -181,6 +205,7 @@ class _AsyncPipe:
                 # returned an object -> continue
                 item = ret
         await completed.put((ind, item))
+        return None
 
     def __or__(self, other):
         if isinstance(other, _PipeFunction):
