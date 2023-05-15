@@ -503,9 +503,9 @@ def test_strip_and_unquote():
         ParsecValidator.strip_and_unquote(['a'], '"""')
 
 
-def test_strip_and_unquote_list_parsec():
-    """Test strip_and_unquote_list using ParsecValidator."""
-    for value, results in [
+@pytest.mark.parametrize(
+    'value, expected',
+    [
         ('"a"\n"b"', ['a', 'b']),
         ('"a", "b"', ['a', 'b']),
         ('"a", "b"', ['a', 'b']),
@@ -517,12 +517,17 @@ def test_strip_and_unquote_list_parsec():
         ("'a', 'b', 'c' # d", ['a', 'b', 'c']),
         ("'a'\n'b'\n'c' # d", ['a', 'b', 'c']),
         ('a, b, c,', ['a', 'b', 'c']),
+        ('"a, b, c"', ['a', 'b', 'c']),
         ('a, b, c # d', ['a', 'b', 'c']),
         ('a, b, c\n"d"', ['a', 'b', 'd']),
         ('a, b, c\n"d" # e', ['a', 'b', '"d"'])
-    ]:
-        assert results == ParsecValidator.strip_and_unquote_list(
-            ['a'], value)
+    ]
+)
+def test_strip_and_unquote_list_parsec(value, expected):
+    """Test strip_and_unquote_list using ParsecValidator."""
+    assert ParsecValidator.strip_and_unquote_list(
+        ['a'], value
+    ) == expected
 
 
 def test_strip_and_unquote_list_cylc(strip_and_unquote_list):

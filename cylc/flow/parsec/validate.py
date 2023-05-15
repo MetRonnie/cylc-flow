@@ -26,6 +26,7 @@ import re
 import shlex
 from collections import deque
 from textwrap import dedent
+from typing import List
 
 from metomi.isodatetime.data import Duration, TimePoint
 from metomi.isodatetime.dumpers import TimePointDumper
@@ -548,13 +549,13 @@ class ParsecValidator:
         return dedent(value).strip()
 
     @classmethod
-    def strip_and_unquote_list(cls, keys, value):
+    def strip_and_unquote_list(cls, keys: List[str], value: str):
         """Remove leading and trailing spaces and unquote list value.
 
         Args:
-            keys (list):
+            keys:
                 Keys in nested dict that represents the raw configuration.
-            value (str):
+            value:
                 String value in raw configuration that is supposed to be a
                 comma separated list.
 
@@ -563,13 +564,16 @@ class ParsecValidator:
 
         Examples:
             >>> ParsecValidator.strip_and_unquote_list(None, ' 1 , "2", 3')
-            ['1', '"2"', '3']
+            ['1', '2', '3']
 
             >>> ParsecValidator.strip_and_unquote_list(None, '" 1 , 2", 3')
             ['1 , 2', '3']
 
+            >>> ParsecValidator.strip_and_unquote_list(None, '1, " 2, 3", 4')
+            ['1', '2, 3', '4']
+
         """
-        if value.startswith('"') or value.startswith("'"):
+        if '"' in value or "'" in value:
             lexer = shlex.shlex(value, posix=True, punctuation_chars=",")
             lexer.commenters = '#'
             lexer.whitespace_split = False
@@ -585,7 +589,7 @@ class ParsecValidator:
                     if match:
                         value = match.groups()[0]
                         break
-            else:
+            else:  # no break
                 value = value.split(r'#', 1)[0].strip()
             values = list(cls._unquoted_list_parse(keys, value))
             # allow trailing commas
