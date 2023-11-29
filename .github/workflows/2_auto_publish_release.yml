@@ -37,14 +37,6 @@ jobs:
     - name: Build
       uses: cylc/release-actions/build-python-package@v1
 
-    - name: Publish distribution to PyPI
-      uses: pypa/gh-action-pypi-publish@v1.8.10
-      with:
-        user: __token__ # uses the API token feature of PyPI - least permissions possible
-        password: ${{ secrets.PYPI_TOKEN }}
-        # # Can try using this for testing:
-        # repository_url: https://test.pypi.org/legacy/
-
     - name: Write release notes
       id: release-notes
       uses: MetRonnie/release-actions/stage-2/write-release-notes@changelog
@@ -64,18 +56,3 @@ jobs:
         release_name: cylc-flow-${{ env.VERSION }}
         prerelease: ${{ env.PRERELEASE }}
         body_path: ${{ steps.release-notes.outputs.filepath }}
-
-    - name: Comment on the release PR with the results & next steps
-      if: always()
-      uses: cylc/release-actions/stage-2/comment-on-pr@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        release-url: ${{ steps.create-release.outputs.html_url }}
-
-    - name: Bump dev version
-      uses: cylc/release-actions/stage-2/bump-dev-version@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        init-file: 'cylc/flow/__init__.py'
