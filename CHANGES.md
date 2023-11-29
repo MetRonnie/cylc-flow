@@ -11,6 +11,38 @@ $ towncrier create <PR-number>.<break|feat|fix>.md --content "Short description"
 
 <!-- towncrier release notes start -->
 
+## __cylc-8.9.10 (Released 2023-11-29)__
+
+### ⚠ Breaking Changes
+
+[#5727](https://github.com/cylc/cylc-flow/pull/5727) - Cylc now ignores `PYTHONPATH` to make it more robust to task environments which set this value. If you want to add to the Cylc environment itself, e.g. to install a Cylc extension, use `CYLC_PYTHONPATH`.
+
+[#5794](https://github.com/cylc/cylc-flow/pull/5794) - Remove `cylc report-timings` from automatic installation with `pip install cylc-flow[all]`. If you now wish to install it use `pip install cylc-flow[report-timings]`. `cylc report-timings` is incompatible with Python 3.12.
+
+[#5836](https://github.com/cylc/cylc-flow/pull/5836) - Removed the 'CYLC_TASK_DEPENDENCIES' environment variable
+
+### 🚀 Enhancements
+
+[#5571](https://github.com/cylc/cylc-flow/pull/5571) - Make workflow `CYLC_` variables available to the template processor during parsing.
+
+[#5709](https://github.com/cylc/cylc-flow/pull/5709) - Forward arbitrary environment variables over SSH connections
+
+[#5731](https://github.com/cylc/cylc-flow/pull/5731) - Major upgrade to `cylc tui` which now supports larger workflows and can browse installed workflows.
+
+[#5772](https://github.com/cylc/cylc-flow/pull/5772) - Add a check for indentation being 4N spaces.
+
+[#5803](https://github.com/cylc/cylc-flow/pull/5803) - Updated 'reinstall' functionality to support multiple workflows
+
+[#5838](https://github.com/cylc/cylc-flow/pull/5838) - `cylc lint`: added rule to check for `rose date` usage (should be replaced with `isodatetime`).
+
+### 🔧 Fixes
+
+[#5801](https://github.com/cylc/cylc-flow/pull/5801) - Fix traceback when using parentheses on right hand side of graph trigger.
+
+[#5821](https://github.com/cylc/cylc-flow/pull/5821) - Fixed issue where large uncommitted changes could cause `cylc install` to hang.
+
+[#5841](https://github.com/cylc/cylc-flow/pull/5841) - Improve handling of S011 to not warn if the # is '#$' (e.g. shell base arithmetic)
+
 ## __cylc-8.2.3 (Released 2023-11-02)__
 
 ### 🔧 Fixes
