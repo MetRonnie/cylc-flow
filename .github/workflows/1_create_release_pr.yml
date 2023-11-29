@@ -47,9 +47,7 @@ jobs:
         uses: cylc/release-actions/build-python-package@v1
 
       - name: Generate changelog
-        run: |
-          python3 -m pip install -q towncrier
-          towncrier build --yes
+        uses: MetRonnie/release-actions/stage-1/towncrier-build@changelog
 
       - name: Create pull request
         uses: cylc/release-actions/stage-1/create-release-pr@v1

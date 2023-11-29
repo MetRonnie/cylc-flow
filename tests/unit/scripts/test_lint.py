@@ -28,11 +28,10 @@ from cylc.flow.scripts.lint import (
     MANUAL_DEPRECATIONS,
     get_cylc_files,
     get_pyproject_toml,
-    get_reference_rst,
-    get_reference_text,
+    get_reference,
     get_upgrader_info,
     lint,
-    merge_cli_with_tomldata,
+    _merge_cli_with_tomldata,
     parse_checks,
     validate_toml_items
 )
@@ -103,6 +102,7 @@ TEST_FILE = """
         pre-script = "echo ${CYLC_SUITE_DEF_PATH}"
         script = {{HELLOWORLD}}
         post-script = "echo ${CYLC_SUITE_INITIAL_CYCLE_TIME}"
+        env-script = POINT=$(rose  date 2059 --offset P1M)
         [[[suite state polling]]]
             template = and
         [[[remote]]]
@@ -142,7 +142,6 @@ TEST_FILE = """
     [[and_another_thing]]
         [[[remote]]]
             host = `rose host-select thingy`
-
 """
 
 
@@ -159,6 +158,9 @@ LINT_TEST_FILE = """
 # {{quix}}
 
 [runtime]
+    [[this_is_ok]]
+      script = echo "this is incorrectly indented"
+
           [[foo]]
         inherit = hello
      [[[job]]]
@@ -332,6 +334,12 @@ def test_check_cylc_file_jinja2_comments():
     assert not any('S011' in msg for msg in lint.messages)
 
 
+def test_check_cylc_file_jinja2_comments_shell_arithmetic_not_warned():
+    """Jinja2 after a $((10#$variable)) should not warn"""
+    lint = lint_text('#!jinja2\na = b$((10#$foo+5)) {{ BAR }}', ['style'])
+    assert not any('S011' in msg for msg in lint.messages)
+
+
 @pytest.mark.parametrize(
     # 11 won't be tested because there is no jinja2 shebang
     'number', set(range(1, len(MANUAL_DEPRECATIONS) + 1)) - {11}
@@ -359,35 +367,47 @@ def test_get_cylc_files_get_all_rcs(tmp_path):
     assert sorted(result) == sorted(expect)
 
 
-MOCK_CHECKS = {
-    'U042': {
-        'short': 'section `[vizualization]` has been removed.',
-        'url': 'some url or other',
-        'purpose': 'U',
-        'rst': 'section ``[vizualization]`` has been removed.',
-        'function': re.compile('not a regex')
-    },
-}
+def mock_parse_checks(*args, **kwargs):
+    return {
+        'U042': {
+            'short': 'section `[vizualization]` has been removed.',
+            'url': 'some url or other',
+            'purpose': 'U',
+            'rst': 'section ``[vizualization]`` has been removed.',
+            'function': re.compile('not a regex')
+        },
+    }
 
 
-def test_get_reference_rst():
+def test_get_reference_rst(monkeypatch):
     """It produces a reference file for our linting."""
-    ref = get_reference_rst(MOCK_CHECKS)
+    monkeypatch.setattr(
+        'cylc.flow.scripts.lint.parse_checks', mock_parse_checks
+    )
+    ref = get_reference('all', 'rst')
     expect = (
         '\n7 to 8 upgrades\n---------------\n\n'
-        'U042\n^^^^\nsection ``[vizualization]`` has been '
+        '`U042 <https://cylc.github.io/cylc-doc/stable'
+        '/html/7-to-8/some url or other>`_'
+        f'\n{ "^" * 78 }'
+        '\nsection ``[vizualization]`` has been '
         'removed.\n\n\n'
     )
     assert ref == expect
 
 
-def test_get_reference_text():
+def test_get_reference_text(monkeypatch):
     """It produces a reference file for our linting."""
-    ref = get_reference_text(MOCK_CHECKS)
+    monkeypatch.setattr(
+        'cylc.flow.scripts.lint.parse_checks', mock_parse_checks
+    )
+    ref = get_reference('all', 'text')
     expect = (
         '\n7 to 8 upgrades\n---------------\n\n'
         'U042:\n    section `[vizualization]` has been '
-        'removed.\n\n\n'
+        'removed.'
+        '\n    https://cylc.github.io/cylc-doc/stable/html/7-to-8/some'
+        ' url or other\n\n\n'
     )
     assert ref == expect
 
@@ -556,7 +576,7 @@ def test_validate_toml_items(input_, error):
 )
 def test_merge_cli_with_tomldata(clidata, tomldata, expect):
     """It merges each of the three sections correctly: see function.__doc__"""
-    assert merge_cli_with_tomldata(clidata, tomldata) == expect
+    assert _merge_cli_with_tomldata(clidata, tomldata) == expect
 
 
 def test_invalid_tomlfile(tmp_path):
@@ -572,11 +592,45 @@ def test_invalid_tomlfile(tmp_path):
     'ref, expect',
     [
         [True, 'line > ``<max_line_len>`` characters'],
-        [False, 'line > 130 characters']
+        [False, 'line > 42 characters']
     ]
 )
 def test_parse_checks_reference_mode(ref, expect):
-    result = parse_checks(['style'], reference=ref)
-    key = list(result.keys())[-1]
-    value = result[key]
+    """Add extra explanation of max line legth setting in reference mode.
+    """
+    result = parse_checks(['style'], reference=ref, max_line_len=42)
+    value = result['S012']
     assert expect in value['short']
+
+
+@pytest.mark.parametrize(
+    'spaces, expect',
+    (
+        (0, 'S002'),
+        (1, 'S013'),
+        (2, 'S013'),
+        (3, 'S013'),
+        (4, None),
+        (5, 'S013'),
+        (6, 'S013'),
+        (7, 'S013'),
+        (8, None),
+        (9, 'S013')
+    )
+)
+def test_indents(spaces, expect):
+    """Test different wrong indentations
+
+    Parameterization deliberately over-obvious to avoid replicating
+    arithmetic logic from code. Dangerously close to re-testing ``%``
+    builtin.
+    """
+    result = lint_text(
+        f"{' ' * spaces}foo = 42",
+        ['style']
+    )
+    result = ''.join(result.messages)
+    if expect:
+        assert expect in result
+    else:
+        assert not result

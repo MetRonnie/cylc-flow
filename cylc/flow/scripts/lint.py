@@ -22,6 +22,8 @@ Checks code style, deprecated syntax and other issues.
 # NOTE: docstring needed for `cylc help all` output
 # (if editing check this still comes out as expected)
 
+LINT_SECTIONS = ['cylc-lint', 'cylclint', 'cylc_lint']
+
 COP_DOC = """cylc lint [OPTIONS] ARGS
 
 Check .cylc and .rc files for code style, deprecated syntax and other issues.
@@ -33,9 +35,15 @@ Commit to version control before using this, in case you want to back out.
 
 A non-zero return code will be returned if any issues are identified.
 This can be overridden by providing the "--exit-zero" flag.
+"""
 
-Configurations for Cylc lint can also be set in a pyproject.toml file.
-
+TOMLDOC = """
+pyproject.toml configuration:{}
+   [cylc-lint]                     # any of {}
+       ignore = ['S001', 'S002']    # List of rules to ignore
+       exclude = ['etc/foo.cylc']  # List of files to ignore
+       rulesets = ['style', '728'] # Sets default rulesets to check
+       max-line-length = 130       # Max line length for linting
 """
 from colorama import Fore
 import functools
@@ -58,7 +66,8 @@ except ImportError:
         loads as toml_loads,
         TOMLDecodeError,
     )
-from typing import Callable, Dict, Iterator, List, Union, TYPE_CHECKING
+from typing import (
+    TYPE_CHECKING, Any, Callable, Dict, Iterator, List, Union)
 
 from cylc.flow import LOG
 from cylc.flow.exceptions import CylcError
@@ -224,13 +233,44 @@ def check_for_obsolete_environment_variables(line: str) -> List[str]:
     return [i for i in OBSOLETE_ENV_VARS if i in line]
 
 
+INDENTATION = re.compile(r'^(\s*)(.*)')
+
+
+def check_indentation(line: str) -> bool:
+    """The key value pair is not indented 4*X spaces
+
+    n.b. We test for trailing whitespace and incorrect section indenting
+    elsewhere
+
+    Examples:
+
+        >>> check_indentation('')
+        False
+        >>> check_indentation('   ')
+        False
+        >>> check_indentation('   [')
+        False
+        >>> check_indentation('baz')
+        False
+        >>> check_indentation('    qux')
+        False
+        >>> check_indentation('   foo')
+        True
+        >>> check_indentation('     bar')
+        True
+    """
+    match = INDENTATION.findall(line)[0]
+    if not match[0] or not match[1] or match[1].startswith('['):
+        return False
+    return bool(len(match[0]) % 4 != 0)
+
+
 FUNCTION = 'function'
 
 STYLE_GUIDE = (
     'https://cylc.github.io/cylc-doc/stable/html/workflow-design-guide/'
     'style-guide.html#'
 )
-URL_STUB = "https://cylc.github.io/cylc-doc/stable/html/7-to-8/"
 SECTION2 = r'\[\[\s*{}\s*\]\]'
 SECTION3 = r'\[\[\[\s*{}\s*\]\]\]'
 FILEGLOBS = ['*.rc', '*.cylc']
@@ -270,7 +310,6 @@ LINE_LEN_NO = 'S012'
 # - short: A short description of the issue.
 # - url: A link to a fuller description.
 # - function: A function to use to run the check.
-# - fallback: A second function(The first function might want to call this?)
 # - kwargs: We want to pass a set of common kwargs to the check function.
 # - evaluate commented lines: Run this check on commented lines.
 # - rst: An rst description, for use in the Cylc docs.
@@ -398,23 +437,34 @@ STYLE_CHECKS = {
         'evaluate commented lines': True,
         FUNCTION: functools.partial(
             check_if_jinja2,
-            function=re.compile(r'(?<!{)#.*?{[{%]').findall
+            function=re.compile(r'(?<!{)#[^$].*?{[{%]').findall
         )
+    },
+    'S012': {
+        'short': 'This number is reserved for line length checks',
+    },
+    'S013': {
+        'short': 'Items should be indented in 4 space blocks.',
+        FUNCTION: check_indentation
     }
 }
 # Subset of deprecations which are tricky (impossible?) to scrape from the
 # upgrader.
 MANUAL_DEPRECATIONS = {
     "U001": {
-        'short': DEPENDENCY_SECTION_MSG['text'],
+        'short': (
+            DEPENDENCY_SECTION_MSG['text'] + ' (``[dependencies]`` detected)'
+        ),
         'url': '',
-        'rst': DEPENDENCY_SECTION_MSG['rst'],
+        'rst': (
+            DEPENDENCY_SECTION_MSG['rst'] + ' (``[dependencies]`` detected)'
+        ),
         FUNCTION: re.compile(SECTION2.format('dependencies')).findall,
     },
     "U002": {
-        'short': DEPENDENCY_SECTION_MSG['text'],
+        'short': DEPENDENCY_SECTION_MSG['text'] + ' (``graph =`` detected)',
         'url': '',
-        'rst': DEPENDENCY_SECTION_MSG['rst'],
+        'rst': DEPENDENCY_SECTION_MSG['rst'] + ' (``graph =`` detected)',
         FUNCTION: re.compile(r'graph\s*=\s*').findall,
     },
     "U003": {
@@ -519,7 +569,21 @@ MANUAL_DEPRECATIONS = {
             'job-script-vars/index.html'
         ),
         FUNCTION: check_for_obsolete_environment_variables,
-    }
+    },
+    'U014': {
+        'short': 'Use "isodatetime [ref]" instead of "rose date [-c]"',
+        'rst': (
+            'For datetime operations in task scripts:\n\n'
+            ' * Use ``isodatetime`` instead of ``rose date``\n'
+            ' * Use ``isodatetime ref`` instead of ``rose date -c`` for '
+            'the current cycle point\n'
+        ),
+        'url': (
+            'https://cylc.github.io/cylc-doc/stable/html/7-to-8/'
+            'cheat-sheet.html#datetime-operations'
+        ),
+        FUNCTION: re.compile(r'rose +date').findall,
+    },
 }
 RULESETS = ['728', 'style', 'all']
 EXTRA_TOML_VALIDATION = {
@@ -541,6 +605,31 @@ EXTRA_TOML_VALIDATION = {
     # consider checking that item is file?
     'exclude': {}
 }
+
+
+def get_url(check_meta: Dict) -> str:
+    """Get URL from check data.
+
+    If the URL doesn't start with http then prepend with address
+    of the 7-to-8 upgrade guide.
+
+    Examples:
+        >>> get_url({'no': 'url key'})
+        ''
+        >>> get_url({'url': ''})
+        ''
+        >>> get_url({'url': 'https://www.h2g2.com/'})
+        'https://www.h2g2.com/'
+        >>> get_url({'url': 'cheat-sheet.html'})
+        'https://cylc.github.io/cylc-doc/stable/html/7-to-8/cheat-sheet.html'
+    """
+    url = check_meta.get('url', '')
+    if url and not url.startswith('http'):
+        url = (
+            "https://cylc.github.io/cylc-doc/stable/html/7-to-8/"
+            + check_meta['url']
+        )
+    return url
 
 
 def validate_toml_items(tomldata):
@@ -592,7 +681,7 @@ def get_pyproject_toml(dir_):
             raise CylcError(f'pyproject.toml did not load: {exc}')
 
         if any(
-            i in loadeddata for i in ['cylc-lint', 'cylclint', 'cylc_lint']
+            i in loadeddata for i in LINT_SECTIONS
         ):
             for key in keys:
                 tomldata[key] = loadeddata.get('cylc-lint').get(key, [])
@@ -602,10 +691,43 @@ def get_pyproject_toml(dir_):
     return tomldata
 
 
-def merge_cli_with_tomldata(
-    clidata, tomldata,
-    override_cli_default_rules=False
-):
+def merge_cli_with_tomldata(target: Path, options: 'Values') -> Dict[str, Any]:
+    """Get a list of checks based on the checking options
+
+    Args:
+        target: Location being linted, in which we might find a
+            pyproject.toml file.
+        options: Cli Options
+
+    This has not been merged with merged with the logic in
+    _merge_cli_with_tomldata to keep the testing of file-system touching
+    and pure logic separate.
+    """
+    ruleset_default = False
+    if options.linter == 'all':
+        options.linter = ['728', 'style']
+    elif options.linter == '':
+        options.linter = ['728', 'style']
+        ruleset_default = True
+    else:
+        options.linter = [options.linter]
+    tomlopts = get_pyproject_toml(target)
+    return _merge_cli_with_tomldata(
+        {
+            'exclude': [],
+            'ignore': options.ignores,
+            'rulesets': options.linter
+        },
+        tomlopts,
+        ruleset_default
+    )
+
+
+def _merge_cli_with_tomldata(
+    clidata: Dict[str, Any],
+    tomldata: Dict[str, Any],
+    override_cli_default_rules: bool = False
+) -> Dict[str, Any]:
     """Merge options set by pyproject.toml with CLI options.
 
     rulesets: CLI should override toml.
@@ -619,7 +741,7 @@ def merge_cli_with_tomldata(
             default, but only if we ask for it on the CLI.
 
     Examples:
-    >>> result = merge_cli_with_tomldata(
+    >>> result = _merge_cli_with_tomldata(
     ... {'rulesets': ['foo'], 'ignore': ['R101'], 'exclude': []},
     ... {'rulesets': ['bar'], 'ignore': ['R100'], 'exclude': ['*.bk']})
     >>> result['ignore']
@@ -908,10 +1030,7 @@ def lint(
                 counter[check_meta['purpose']] += 1
                 if modify:
                     # insert a command to help the user
-                    if check_meta['url'].startswith('http'):
-                        url = check_meta['url']
-                    else:
-                        url = URL_STUB + check_meta['url']
+                    url = get_url(check_meta)
 
                     yield (
                         f'# [{get_index_str(check_meta, index)}]: '
@@ -954,99 +1073,105 @@ def get_cylc_files(
                 yield path
 
 
-def get_reference_rst(checks):
-    """Print a reference for checks to be carried out.
+REFERENCE_TEMPLATES = {
+    'section heading': '\n{title}\n{underline}\n',
+    'issue heading': {
+        'text': '\n{check}:\n    {summary}\n    {url}\n\n',
+        'rst': '\n`{check} <{url}>`_\n{underline}\n{summary}\n\n',
+    },
+    'auto gen message': (
+        'U998 and U999 represent automatically generated'
+        ' sets of deprecations and upgrades.'
+    ),
+}
 
-    Returns:
-        RST compatible text.
+
+def get_reference(linter, output_type):
+    """Fill out a template with all the issues Cylc Lint looks for.
     """
+    if linter in {'all', ''}:
+        rulesets = ['728', 'style']
+    else:
+        rulesets = [linter]
+    checks = parse_checks(rulesets, reference=True)
+
+    issue_heading_template = REFERENCE_TEMPLATES['issue heading'][output_type]
     output = ''
     current_checkset = ''
     for index, meta in checks.items():
         # Check if the purpose has changed - if so create a new
-        # section title:
+        # section heading:
         if meta['purpose'] != current_checkset:
             current_checkset = meta['purpose']
             title = CHECKS_DESC[meta["purpose"]]
-            output += f'\n{title}\n{"-" * len(title)}\n\n'
+            output += REFERENCE_TEMPLATES['section heading'].format(
+                title=title, underline="-" * len(title))
 
             if current_checkset == 'A':
-                output += (
-                    '\n.. note::\n'
-                    '\n   U998 and U999 represent automatically generated '
-                    'sets of deprecations and upgrades.\n\n'
-                )
+                output += REFERENCE_TEMPLATES['auto gen message']
 
-        if current_checkset == 'A':
-            summary = meta.get("rst", meta['short'])
-            output += '\n- ' + summary
-        else:
-            # Fill a template with info about the issue.
-            template = (
-                '{check}\n^^^^\n{summary}\n\n'
-            )
-            if meta['url'].startswith('http'):
-                url = meta['url']
-            else:
-                url = URL_STUB + meta['url']
-            summary = meta.get("rst", meta['short'])
-            msg = template.format(
-                check=get_index_str(meta, index),
-                summary=summary,
-                url=url,
-            )
-            output += msg
-    output += '\n'
-    return output
-
-
-def get_reference_text(checks):
-    """Print a reference for checks to be carried out.
-
-    Returns:
-        RST compatible text.
-    """
-    output = ''
-    current_checkset = ''
-    for index, meta in checks.items():
-        # Check if the purpose has changed - if so create a new
-        # section title:
-        if meta['purpose'] != current_checkset:
-            current_checkset = meta['purpose']
-            title = CHECKS_DESC[meta["purpose"]]
-            output += f'\n{title}\n{"-" * len(title)}\n\n'
-
-            if current_checkset == 'A':
-                output += (
-                    'U998 and U999 represent automatically generated'
-                    ' sets of deprecations and upgrades.'
-                )
         # Fill a template with info about the issue.
+        if output_type == 'rst':
+            summary = meta.get("rst", meta['short'])
+        elif output_type == 'text':
+            summary = meta.get("short").replace('``', '')
+
         if current_checkset == 'A':
-            summary = meta.get("rst", meta['short']).replace('``', '')
+            # Condensed check summary for auto-generated lint items.
+            if output_type == 'rst':
+                output += '\n'
             output += '\n* ' + summary
         else:
-            template = (
-                '{check}:\n    {summary}\n\n'
-            )
-            if meta['url'].startswith('http'):
-                url = meta['url']
-            else:
-                url = URL_STUB + meta['url']
+            template = issue_heading_template
+            url = get_url(meta)
             msg = template.format(
                 title=index,
                 check=get_index_str(meta, index),
-                summary=meta['short'],
+                summary=summary,
                 url=url,
+                underline=(
+                    len(get_index_str(meta, index)) + len(url) + 6
+                ) * '^'
             )
             output += msg
     output += '\n'
     return output
+
+
+def target_version_check(
+    target: Path,
+    quiet: 'Values',
+    mergedopts: Dict[str, Any]
+) -> List:
+    """
+    Check whether target is an upgraded Cylc 8 workflow.
+
+    If it isn't then we shouldn't run the 7-to-8 checks upon
+    it.
+
+    If it isn't and the only ruleset requested by the user is '728'
+    we should exit with an error code unless the user has specifically
+    disabled thatr with --exit-zero.
+    """
+    cylc8 = (target / 'flow.cylc').exists()
+    if not cylc8 and mergedopts['rulesets'] == ['728']:
+        LOG.error(
+            f'{target} not a Cylc 8 workflow: '
+            'Lint after renaming '
+            '"suite.rc" to "flow.cylc"'
+        )
+        sys.exit(not quiet)
+    elif not cylc8 and '728' in mergedopts['rulesets']:
+        check_names = mergedopts['rulesets']
+        check_names.remove('728')
+    else:
+        check_names = mergedopts['rulesets']
+    return check_names
 
 
 def get_option_parser() -> COP:
     parser = COP(
-        COP_DOC,
+        COP_DOC + TOMLDOC.format('', str(LINT_SECTIONS)),
         argdoc=[
             COP.optional(WORKFLOW_ID_OR_PATH_ARG_DOC)
         ],
@@ -1088,7 +1213,7 @@ def get_option_parser() -> COP:
         default=[],
         dest='ignores',
         metavar="CODE",
-        choices=tuple(STYLE_CHECKS)
+        choices=list(STYLE_CHECKS.keys()) + [LINE_LEN_NO]
     )
     parser.add_option(
         '--exit-zero',
@@ -1104,72 +1229,37 @@ def get_option_parser() -> COP:
 @cli_function(get_option_parser)
 def main(parser: COP, options: 'Values', target=None) -> None:
     if options.ref_mode:
-        if options.linter in {'all', ''}:
-            rulesets = ['728', 'style']
-        else:
-            rulesets = [options.linter]
-        print(get_reference_text(parse_checks(rulesets, reference=True)))
+        print(get_reference(options.linter, 'text'))
         sys.exit(0)
 
-    # If target not given assume we are looking at PWD
+    # If target not given assume we are looking at PWD:
     if target is None:
         target = str(Path.cwd())
 
-    # make sure the target is a src/run directories
+    # make sure the target is a src/run directory:
     _, _, target = parse_id(
         target,
         src=True,
         constraint='workflows',
     )
 
-    # Get a list of checks bas ed on the checking options:
-    # Allow us to check any number of folders at once
+    # We want target to be the containing folder, not the flow.cylc
+    # file identified by parse_id:
     target = target.parent
-    ruleset_default = False
-    if options.linter == 'all':
-        options.linter = ['728', 'style']
-    elif options.linter == '':
-        options.linter = ['728', 'style']
-        ruleset_default = True
-    else:
-        options.linter = [options.linter]
-    tomlopts = get_pyproject_toml(target)
-    mergedopts = merge_cli_with_tomldata(
-        {
-            'exclude': [],
-            'ignore': options.ignores,
-            'rulesets': options.linter
-        },
-        tomlopts,
-        ruleset_default
-    )
 
-    # Check whether target is an upgraded Cylc 8 workflow.
-    # If it isn't then we shouldn't run the 7-to-8 checks upon
-    # it:
-    cylc8 = (target / 'flow.cylc').exists()
-    if not cylc8 and mergedopts['rulesets'] == ['728']:
-        LOG.error(
-            f'{target} not a Cylc 8 workflow: '
-            'Lint after renaming '
-            '"suite.rc" to "flow.cylc"'
-        )
-        # Exit with an error code if --exit-zero was not set.
-        # Return codes: sys.exit(True) == 1, sys.exit(False) == 0
-        sys.exit(not options.exit_zero)
-    elif not cylc8 and '728' in mergedopts['rulesets']:
-        check_names = mergedopts['rulesets']
-        check_names.remove('728')
-    else:
-        check_names = mergedopts['rulesets']
+    mergedopts = merge_cli_with_tomldata(target, options)
 
-    # Check each file:
+    check_names = target_version_check(
+        target=target, quiet=options.exit_zero, mergedopts=mergedopts)
+
+    # Get the checks object.
     checks = parse_checks(
         check_names,
         ignores=mergedopts['ignore'],
         max_line_len=mergedopts['max-line-length']
     )
 
+    # Check each file matching a pattern:
     counter: Dict[str, int] = {}
     for file in get_cylc_files(target, mergedopts['exclude']):
         LOG.debug(f'Checking {file}')
@@ -1206,4 +1296,4 @@ def main(parser: COP, options: 'Values', target=None) -> None:
 
 # NOTE: use += so that this works with __import__
 # (docstring needed for `cylc help all` output)
-__doc__ += get_reference_rst(parse_checks(['728', 'style'], reference=True))
+__doc__ += get_reference('all', 'rst')

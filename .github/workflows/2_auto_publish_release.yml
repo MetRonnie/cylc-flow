@@ -45,6 +45,14 @@ jobs:
         # # Can try using this for testing:
         # repository_url: https://test.pypi.org/legacy/
 
+    - name: Write release notes
+      id: release-notes
+      uses: MetRonnie/release-actions/stage-2/write-release-notes@changelog
+      with:
+        footer: |
+          Cylc 8 can be installed via pypi or Conda - you don't need to download this release directly.
+          See the [installation](https://cylc.github.io/cylc-doc/latest/html/installation.html) section of the documentation.
+
     - name: Publish GitHub release
       id: create-release
       uses: cylc/release-actions/create-release@v1
@@ -55,12 +63,7 @@ jobs:
         tag_name: ${{ env.VERSION }}
         release_name: cylc-flow-${{ env.VERSION }}
         prerelease: ${{ env.PRERELEASE }}
-        body: |
-          See [${{ env.CHANGELOG_FILE }}](https://github.com/${{ github.repository }}/blob/master/${{ env.CHANGELOG_FILE }}) for detail.
-
-          Cylc 8 can be installed via pypi or Conda - you don't need to download this release directly.
-          See the [installation](https://cylc.github.io/cylc-doc/latest/html/installation.html) section of the documentation.
-        # TODO: Get topmost changelog section somehow and use that as the body?
+        body_path: ${{ steps.release-notes.outputs.filepath }}
 
     - name: Comment on the release PR with the results & next steps
       if: always()
