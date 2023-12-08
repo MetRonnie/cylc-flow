@@ -170,6 +170,16 @@ jobs:
       - name: Configure git  # Needed by the odd test
         uses: cylc/release-actions/configure-git@v1
 
+      - name: Print localhost platform
+        shell: python
+        run: |
+          from cylc.flow.platforms import get_platform
+          print(get_platform())
+
+      - name: Print localhost platform config
+        run: |
+          cylc config -i '[platforms][localhost]'
+
       - name: Filter Tests
         env:
           # NOTE: we only want the CHUNK set in this step else we will
