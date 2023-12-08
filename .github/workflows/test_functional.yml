@@ -103,24 +103,32 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Patch DNS
+      - name: Create global config
+        run: |
+          CONF_PATH="$HOME/.cylc/flow/8"
+          mkdir -p "$CONF_PATH"
+          touch "$CONF_PATH/global.cylc"
+          ln -s "$CONF_PATH/global.cylc" "$CONF_PATH/global-tests.cylc"
+          echo "GLOBAL_CFG_PATH=${CONF_PATH}/global.cylc" >> "$GITHUB_ENV"
+
+      - name: Detect DNS problem
         if: startsWith(matrix.os, 'macos')
+        id: dns
+        uses: MetRonnie/release-actions/detect-dns-problem@dns
+
+      - name: Patch DNS
+        if: steps.dns.outputs.problem == 'true'
         run: |
           # see https://github.com/actions/runner-images/issues/8649#issuecomment-1779548056
           echo -e "$(ipconfig getifaddr en0) $(hostname -f) $(hostname -s)" | sudo tee -a /etc/hosts
           dscacheutil -q host -a name $(hostname -f)
-          CONF_PATH="$HOME/.cylc/flow/8"
-          mkdir -p "$CONF_PATH"
-          cat > "$CONF_PATH/global.cylc" <<__HERE__
+          cat >> "$GLOBAL_CFG_PATH" <<__HERE__
           [platforms]
             [[localhost, $(hostname -f), $(hostname -s)]]
               hosts = localhost
               install target = localhost
               ssh command = ssh -oBatchMode=yes -oConnectTimeout=8 -oStrictHostKeyChecking=no
           __HERE__
-          cp "$CONF_PATH/global.cylc" "$CONF_PATH/global-tests.cylc"
-          echo "# $CONF_PATH/global-tests.cylc"
-          cat "$CONF_PATH/global-tests.cylc"
 
       - name: Brew Install
         if: startsWith(matrix.os, 'macos')
@@ -162,16 +170,13 @@ jobs:
       - name: Configure Atrun
         if: contains(matrix.platform, '_local_at')
         run: |
-          PTH="$HOME/.cylc/flow/"
-          mkdir -p "${PTH}"
-          cat > "${PTH}/global.cylc" << __HERE__
+          cat >> "$GLOBAL_CFG_PATH" << __HERE__
             [platforms]
                 [[_local_at_indep_tcp]]
                     hosts = localhost
                     install target = localhost
                     job runner = at
           __HERE__
-          cp "${PTH}/global.cylc" "${PTH}/global-tests.cylc"
 
       - name: Swarm Configure
         run: |
