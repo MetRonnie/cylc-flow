@@ -102,6 +102,7 @@ jobs:
               install target = localhost
               ssh command = ssh -oBatchMode=yes -oConnectTimeout=8 -oStrictHostKeyChecking=no
           __HERE__
+          cat "$GLOBAL_CFG_PATH"
 
       - name: Brew Install
         if: startsWith(matrix.os, 'macos')
