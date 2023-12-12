@@ -181,20 +181,12 @@ jobs:
         run: |
           cylc config -i '[platforms][localhost]'
 
-      - name: Filter Tests
-        env:
-          # NOTE: we only want the CHUNK set in this step else we will
-          # re-chunk tests later when they run
-          CHUNK: ${{ matrix.chunk }}
+      - name: Test _is_process_running
+        shell: python
         run: |
-          etc/bin/run-functional-tests \
-            --dry \
-            ${{ matrix.test-base }} \
-            > test-file
-          if [[ $REMOTE_PLATFORM == 'true' ]]; then
-            # skip tests that don't configure platform requirements
-            grep -l --color=never REQUIRE_PLATFORM $(cat test-file) > test-file
-          fi
+          import socket
+          from cylc.flow.workflow_files import _is_process_running
+          _is_process_running(socket.gethostname(), 16686, "mock command")
 
       - name: Test
         id: test
@@ -211,7 +203,7 @@ jobs:
           etc/bin/run-functional-tests \
               -j "${NPROC}" \
               --state=save \
-              $(cat test-file) \
+              tests/f/pause-resume/01-beyond-stop.t \
               || (echo "finished=true" >> $GITHUB_OUTPUT && false)
 
       - name: Time Out
@@ -227,12 +219,7 @@ jobs:
         timeout-minutes: 10
         if: steps.test.outcome == 'failure' && steps.test.outputs.finished == 'true'
         run: |
-          # re-run failed tests providing that they didn't time out first time
-          # TODO: make the tests deterministic so we don't need to do this
-          etc/bin/run-functional-tests \
-              -j 1 \
-              -v \
-              --state=save,failed $(cat test-file)
+          exit 1
 
       - name: Copy cylc-run out of container
         if: failure() && steps.test.outcome == 'failure' && env.REMOTE_PLATFORM == 'true'

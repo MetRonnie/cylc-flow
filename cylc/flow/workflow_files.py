@@ -426,8 +426,11 @@ def _is_process_running(
 
     if error:
         raise CylcError(
-            f'Cannot determine whether workflow is running on {host}.'
-            f'\n{command}'
+            f'Cannot determine whether workflow is running on {host}.\n\n'
+            f'COMMAND:\n$ {cli_format(cmd)}'
+            f'RETURN CODE: {proc.returncode}\n'
+            f'STDOUT:\n{out}\n'
+            f'STDERR:\n{err}'
         )
 
     return cli_format(process['cmdline']) == command
