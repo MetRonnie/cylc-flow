@@ -171,15 +171,17 @@ jobs:
       - name: Configure git  # Needed by the odd test
         uses: cylc/release-actions/configure-git@v1
 
-      - name: Print localhost platform
+      - name: Test socket stuff
         shell: python
         run: |
-          from cylc.flow.platforms import get_platform
-          print(get_platform())
+          import socket
 
-      - name: Print localhost platform config
-        run: |
-          cylc config -i '[platforms][localhost]'
+          print(f"socket.gethostname()                              : {socket.gethostname()}")
+          print(f"socket.getfqdn()                                  : {socket.getfqdn()}")
+          print(f"socket.getfqdn(socket.gethostname())              : {socket.getfqdn(socket.gethostname())}")
+          print(f"socket.getfqdn(socket.getfqdn())                  : {socket.getfqdn(socket.getfqdn())}")
+          print(f"socket.gethostbyname_ex(socket.gethostname())[0]  : {socket.gethostbyname_ex(socket.gethostname())[0]}")
+          print(f"socket.gethostbyname_ex(socket.getfqdn())[0]      : {socket.gethostbyname_ex(socket.getfqdn())[0]}")
 
       - name: Test _is_process_running
         shell: python
