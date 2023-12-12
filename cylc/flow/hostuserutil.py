@@ -196,7 +196,7 @@ class HostUtil:
         Return True if host is unknown.
 
         """
-        print(f"### 0: {self._remote_hosts} ###")
+        print(f"\n### 0: {name} ###\n")
         if name not in self._remote_hosts:
             if not name or name.startswith("localhost"):
                 # e.g. localhost4.localdomain4
@@ -204,14 +204,14 @@ class HostUtil:
             else:
                 try:
                     host_info = self._get_host_info(name)
-                    print(f"### 1: {host_info} ###")
+                    print(f"\n### 1: {host_info} ###\n")
                 except IOError as exc:
                     self._remote_hosts[name] = True
-                    print(f"### E: {exc}")
+                    print(f"\n### E: {exc}\n")
                 else:
                     self._remote_hosts[name] = (
                         host_info != self._get_host_info())
-                    print(f"### 2: {self._get_host_info()} ###")
+                    print(f"\n### 2: {self._get_host_info()} ###\n")
         return self._remote_hosts[name]
 
     def is_remote_user(self, name):
