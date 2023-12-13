@@ -115,9 +115,11 @@ class HostUtil:
 
     def _get_host_info(self, target=None):
         """Return the extended info of the current host."""
+        print(f"------ ^: {self._host_exs} £££ {target}")
         if target not in self._host_exs:
             if target is None:
                 target = socket.getfqdn()
+            print(f"------ £: {target}")
             if (
                 IS_MAC_OS
                 and target == (
@@ -131,12 +133,15 @@ class HostUtil:
                 # https://github.com/cylc/cylc-flow/issues/2689
                 # https://github.com/cylc/cylc-flow/issues/3595
                 target = socket.gethostname()
+                print(f"------ %: {target}")
             try:
                 self._host_exs[target] = socket.gethostbyname_ex(target)
             except IOError as exc:
                 if exc.filename is None:
                     exc.filename = target
+                print(f"------ E: {exc}")
                 raise
+        print(f"------ $: {self._host_exs}")
         return self._host_exs[target]
 
     @staticmethod
@@ -204,14 +209,14 @@ class HostUtil:
             else:
                 try:
                     host_info = self._get_host_info(name)
-                    print(f"\n### 1: {host_info} ###\n")
                 except IOError as exc:
                     self._remote_hosts[name] = True
                     print(f"\n### E: {exc}\n")
                 else:
-                    self._remote_hosts[name] = (
-                        host_info != self._get_host_info())
-                    print(f"\n### 2: {self._get_host_info()} ###\n")
+                    host_info2 = self._get_host_info()
+                    self._remote_hosts[name] = (host_info != host_info2)
+                    print(f"\n### 1: {host_info} ###\n")
+                    print(f"\n### 2: {host_info2} ###\n")
         return self._remote_hosts[name]
 
     def is_remote_user(self, name):

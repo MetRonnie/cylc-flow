@@ -176,38 +176,8 @@ jobs:
         run: |
           import socket
 
-          print(f"socket.gethostname()                              : {socket.gethostname()}")
-          print(f"socket.getfqdn()                                  : {socket.getfqdn()}")
-          print(f"socket.getfqdn(socket.gethostname())              : {socket.getfqdn(socket.gethostname())}")
-          print(f"socket.getfqdn(socket.getfqdn())                  : {socket.getfqdn(socket.getfqdn())}")
-          print(f"socket.gethostbyname_ex(socket.gethostname())     : {socket.gethostbyname_ex(socket.gethostname())}")
-          print(f"socket.gethostbyname_ex(socket.getfqdn())         : {socket.gethostbyname_ex(socket.getfqdn())}")
-          print("\n")
-
-          print(f"socket.gethostname()                              : {socket.gethostname()}")
-          print(f"socket.getfqdn()                                  : {socket.getfqdn()}")
-          print(f"socket.getfqdn(socket.gethostname())              : {socket.getfqdn(socket.gethostname())}")
-          print(f"socket.getfqdn(socket.getfqdn())                  : {socket.getfqdn(socket.getfqdn())}")
-          print(f"socket.gethostbyname_ex(socket.gethostname())     : {socket.gethostbyname_ex(socket.gethostname())}")
-          print(f"socket.gethostbyname_ex(socket.getfqdn())         : {socket.gethostbyname_ex(socket.getfqdn())}")
-
-      - name: Test _get_host_info
-        shell: python
-        run: |
-          import socket
-          from cylc.flow.hostuserutil import HostUtil
-          name = socket.gethostname()
-          h = HostUtil.get_inst()
-          print(f"_get_host_info(name)   : {h._get_host_info(name)}")
-          print(f"_host_exs              : {h._host_exs}")
-          print(f"_get_host_info()       : {h._get_host_info()}")
-          print(f"_host_exs              : {h._host_exs}")
-          print(f"_get_host_info(name)   : {h._get_host_info(name)}")
-          print(f"_host_exs              : {h._host_exs}")
-          print(f"_get_host_info()       : {h._get_host_info()}")
-          print(f"_host_exs              : {h._host_exs}")
-          print(f"_get_host_info()       : {h._get_host_info()}")
-          print(f"_host_exs              : {h._host_exs}")
+          print(f"socket.gethostbyname_ex(socket.gethostname())  : {socket.gethostbyname_ex(socket.gethostname())}")
+          print(f"socket.gethostbyname_ex(socket.getfqdn())      : {socket.gethostbyname_ex(socket.getfqdn())}")
 
       - name: Test _is_process_running
         shell: python
