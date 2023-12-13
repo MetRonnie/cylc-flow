@@ -176,8 +176,17 @@ jobs:
         run: |
           import socket
 
-          print(f"socket.gethostbyname_ex(socket.gethostname())  : {socket.gethostbyname_ex(socket.gethostname())}")
-          print(f"socket.gethostbyname_ex(socket.getfqdn())      : {socket.gethostbyname_ex(socket.getfqdn())}")
+          print(f"socket.gethostbyname_ex(socket.gethostname())  \n>>> {socket.gethostbyname_ex(socket.gethostname())}")
+          print(f"socket.gethostbyname_ex(socket.gethostname())  \n>>> {socket.gethostbyname_ex(socket.gethostname())}")
+          print(f"socket.gethostbyname_ex(socket.getfqdn())      \n>>> {socket.gethostbyname_ex(socket.getfqdn())}")
+
+          print("")
+          print(f"socket.gethostname()                           \n>>> {socket.gethostname()}")
+          print(f"socket.getfqdn()                               \n>>> {socket.getfqdn()}")
+
+          print("")
+          print(f"socket.gethostbyname_ex(socket.gethostname())  \n>>> {socket.gethostbyname_ex(socket.gethostname())}")
+          print(f"socket.gethostbyname_ex(socket.getfqdn())      \n>>> {socket.gethostbyname_ex(socket.getfqdn())}")
 
       - name: Test _is_process_running
         shell: python
