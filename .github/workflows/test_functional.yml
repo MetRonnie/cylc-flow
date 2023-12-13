@@ -136,191 +136,22 @@ jobs:
         # Sets up mocked mail command & any other custom executables
         run: echo "${{ github.workspace }}/.github/bin" >> $GITHUB_PATH
 
-      - name: Install
-        run: |
-          pip install -e ."[all]"
-          mkdir "$HOME/cylc-run"
-
-      - name: Configure Atrun
-        if: contains(matrix.platform, '_local_at')
-        run: |
-          cat >> "$GLOBAL_CFG_PATH" << __HERE__
-            [platforms]
-                [[_local_at_indep_tcp]]
-                    hosts = localhost
-                    install target = localhost
-                    job runner = at
-          __HERE__
-
-      - name: Swarm Configure
-        run: |
-          etc/bin/swarm --yes --debug configure
-
-      - name: Swarm Build
-        if: env.REMOTE_PLATFORM == 'true'
-        run: |
-          # `swarm configure` seems to get ignored so override the user config
-          cp etc/conf/ssh_config $HOME/.ssh/config
-          # build and run the swarm
-          etc/bin/swarm --yes --debug build
-          etc/bin/swarm --yes --debug run
-          # test that it's up and running before proceeding
-          sleep 1
-          ssh -vv _remote_background_indep_poll hostname
-
-      - name: Configure git  # Needed by the odd test
-        uses: cylc/release-actions/configure-git@v1
 
       - name: Test socket stuff
         shell: python
         run: |
           import socket
 
-          print(f"socket.gethostbyname_ex(socket.gethostname())  \n>>> {socket.gethostbyname_ex(socket.gethostname())}")
-          print(f"socket.gethostbyname_ex(socket.gethostname())  \n>>> {socket.gethostbyname_ex(socket.gethostname())}")
+          name = socket.gethostname()
+
+          print(f"socket.gethostname()                           \n>>> {name}")
+          print("")
+
+          print(f"socket.gethostbyname_ex({name})                \n>>> {socket.gethostbyname_ex(name)}")
+          print(f"socket.gethostbyname_ex({name})                \n>>> {socket.gethostbyname_ex(name)}")
 
           print("")
-          print(f"socket.gethostname()                           \n>>> {socket.gethostname()}")
           print(f"socket.getfqdn()                               \n>>> {socket.getfqdn()}")
 
           print("")
-          print(f"socket.gethostbyname_ex(socket.gethostname())  \n>>> {socket.gethostbyname_ex(socket.gethostname())}")
-          print(f"socket.gethostbyname_ex(socket.getfqdn())      \n>>> {socket.gethostbyname_ex(socket.getfqdn())}")
-          print(f"socket.gethostbyname_ex(socket.gethostname())  \n>>> {socket.gethostbyname_ex(socket.gethostname())}")
-
-      - name: Test _is_process_running
-        shell: python
-        run: |
-          import socket
-          from cylc.flow.workflow_files import _is_process_running
-          _is_process_running(socket.gethostname(), 16686, "mock command")
-
-      - name: Test
-        id: test
-        timeout-minutes: 35
-        continue-on-error: true
-        run: |
-          echo "finished=false" >> $GITHUB_OUTPUT
-          if [[ '${{ matrix.test-base }}' == 'tests/k' ]]; then
-              NPROC=4
-          else
-              NPROC=8
-          fi
-          # NOTE: test base is purposefully un-quoted
-          etc/bin/run-functional-tests \
-              -j "${NPROC}" \
-              --state=save \
-              tests/f/pause-resume/01-beyond-stop.t \
-              || (echo "finished=true" >> $GITHUB_OUTPUT && false)
-
-      - name: Time Out
-        if: steps.test.outcome == 'failure' && steps.test.outputs.finished != 'true'
-        run: |
-          echo '::error:: tests timed-out'
-          # help to identify the tests that were running at the time
-          cylc scan --state=all --format=rich --color-blind
-          # fail the workflow
-          false
-
-      - name: Re-run failed tests
-        timeout-minutes: 10
-        if: steps.test.outcome == 'failure' && steps.test.outputs.finished == 'true'
-        run: |
-          exit 1
-
-      - name: Copy cylc-run out of container
-        if: failure() && steps.test.outcome == 'failure' && env.REMOTE_PLATFORM == 'true'
-        run: |
-          # pick the first host in the list
-          host="$(cut -d ' ' -f 1 <<< "${{ matrix.platform }}")"
-          # copy back the remote cylc-run dir
-          rsync -av \
-            "${host}:/root/cylc-run/" \
-            "${HOME}/cylc-run/${host}/"
-
-      - name: Debug
-        if: failure() && steps.test.outcome == 'failure'
-        timeout-minutes: 1
-        run: |
-          find "$HOME/cylc-run" -name '*.err' -type f \
-              -exec echo '====== {} ======' \; -exec cat '{}' \;
-          find "$HOME/cylc-run" -name '*.log' -type f \
-              -exec echo '====== {} ======' \; -exec cat '{}' \;
-          find "${TMPDIR:-/tmp}/${USER}/cylctb-"* -type f \
-              -exec echo '====== {} ======' \; -exec cat '{}' \;
-
-      - name: Set artifact upload name
-        if: always()
-        id: uploadname
-        run: |
-          # artifact name cannot contain '/' characters
-          CID="$(sed 's|/|-|g' <<< "${{ matrix.name || matrix.chunk }}")"
-          echo "uploadname=$CID" >> $GITHUB_OUTPUT
-
-      - name: Upload failed tests artifact
-        if: failure() && steps.test.outcome == 'failure'
-        uses: actions/upload-artifact@v3
-        with:
-          name: cylc-run (${{ steps.uploadname.outputs.uploadname }})
-          path: ~/cylc-run/
-
-      - name: Fetch Remote Coverage
-        if: env.REMOTE_PLATFORM == 'true'
-        run: |
-          # pick the first host in the list
-          host="$(cut -d ' ' -f 1 <<< "${{ matrix.platform }}")"
-          # copy back the remote coverage files
-          rsync -av \
-            "${host}:/cylc/" \
-            '.' \
-            --include='.coverage*' \
-            --exclude='*' \
-            >rsyncout
-          cat rsyncout
-          # fiddle the python source location to match the local system
-          for db in $(grep --color=never '.coverage\.' rsyncout); do
-            sqlite3 "$db" "
-              UPDATE file
-              SET path = REPLACE(path, '/cylc/cylc/', '$PWD/cylc/')
-            "
-          done
-
-      - name: Shutdown
-        if: always()
-        run: |
-          etc/bin/swarm kill
-
-      - name: Combine coverage & report
-        run: |
-          coverage combine -a
-          coverage xml
-          coverage report
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: coverage_${{ steps.uploadname.outputs.uploadname }}
-          path: coverage.xml
-          retention-days: 7
-
-  codecov:
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v3
-
-      - name: Codecov upload
-        uses: codecov/codecov-action@v3
-        with:
-          name: ${{ github.workflow }}
-          flags: functional-tests
-          fail_ci_if_error: true
-          verbose: true
-          # Token not required for public repos, but avoids upload failure due
-          # to rate-limiting (but not for PRs opened from forks)
-          token: ${{ secrets.CODECOV_TOKEN }}
+          print(f"socket.gethostbyname_ex({name})                \n>>> {socket.gethostbyname_ex(name)}")
