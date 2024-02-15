@@ -245,22 +245,26 @@ def make_symlink_dir(path: Union[Path, str], target: Union[Path, str]) -> bool:
         # note all three checks are needed here due to case where user has set
         # their own symlink which does not match the global config set one.
         if path.is_symlink() and target.exists() and path.samefile(target):
+            print(f"Correct symlink already exists: {path} -> {target}")
             # correct symlink already exists
             return False
         # symlink name is in use by a physical file or directory
         # log and return
-        LOG.debug(
+        print(
             f"Unable to create symlink to {target}. "
             f"The path {path} already exists.")
         return False
     elif path.is_symlink():
         # remove a broken symlink.
+        print(f"Removing broken symlink: {path}")
         try:
             path.unlink()
         except OSError as exc:
             raise WorkflowFilesError(
                 f"Failed to remove broken symlink {path}\n{exc}"
             )
+
+    print(f"Making dir {target}")
     try:
         target.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
@@ -272,10 +276,13 @@ def make_symlink_dir(path: Union[Path, str], target: Union[Path, str]) -> bool:
 
     # This is needed in case share and share/cycle have the same symlink dir:
     if path.exists():
+        print(f"!Code Epsilon! {path} -> {target}")
         return False
 
+    print(f"Making dir {path.parent}")
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
+        print(f"Making symlink {path} -> {target}")
         path.symlink_to(target)
         return True
     except OSError as exc:

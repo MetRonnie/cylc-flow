@@ -92,6 +92,9 @@ def remote_init(install_target: str, rund: str, *dirs_to_symlink: str) -> None:
         dirs_to_symlink: directories to be symlinked in form
         [directory=symlink_location, ...]
     """
+    orig_datadir = os.environ.get('DATADIR')
+    print(f"$DATADIR: {orig_datadir}")
+    # home_dir = os.environ.get('HOME')
     rund = os.path.expandvars(rund)
     for item in dirs_to_symlink:
         key, val = item.split("=", 1)
@@ -105,6 +108,7 @@ def remote_init(install_target: str, rund: str, *dirs_to_symlink: str) -> None:
             print(f'Error occurred when symlinking.'
                   f' {target} contains an invalid environment variable.')
             return
+        # print(f"Making symlink dir {path} -> {target}")
         make_symlink_dir(path, target)
     srvd = os.path.join(rund, WorkflowFiles.Service.DIRNAME)
     os.makedirs(srvd, exist_ok=True)
