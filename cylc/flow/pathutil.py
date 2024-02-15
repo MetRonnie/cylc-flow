@@ -254,12 +254,13 @@ def make_symlink_dir(path: Union[Path, str], target: Union[Path, str]) -> bool:
             f"The path {path} already exists.")
         return False
     elif path.is_symlink():
-        # remove a bad symlink.
+        # remove a broken symlink.
         try:
             path.unlink()
-        except OSError:
+        except OSError as exc:
             raise WorkflowFilesError(
-                f"Error when symlinking. Failed to unlink bad symlink {path}.")
+                f"Failed to remove broken symlink {path}\n{exc}"
+            )
     try:
         target.mkdir(parents=True, exist_ok=False)
     except FileExistsError:
