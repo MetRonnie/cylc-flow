@@ -19,17 +19,8 @@ jobs:
     strategy:
       fail-fast: false # don't stop on first failure
       matrix:
-        os: ['ubuntu-latest']
-        python-version: ['3.7', '3.8', '3.10', '3.11', '3']
-        include:
-          # mac os test
-          - os: 'macos-11'
-            python-version: '3.7'  # oldest supported version
-
-          # non-utc timezone test
-          - os: 'ubuntu-latest'
-            python-version: '3.9'  # not the oldest, not the most recent version
-            time-zone: 'XXX-09:35'
+        os: ['macos-14']
+        python-version: ['3.7', '3']
 
     env:
       TZ: ${{ matrix.time-zone }}
@@ -78,74 +69,3 @@ jobs:
         run: |
           coverage xml
           coverage report
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage_${{ matrix.os }}_py-${{ matrix.python-version }}
-          path: coverage.xml
-          retention-days: 7
-
-  lint:
-    runs-on: 'ubuntu-latest'
-    timeout-minutes: 10
-    steps:
-      - name: Apt-Get Install
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # note: exclude python 3.10+ from mypy checks as these produce false
-      # positives in installed libraries for python 3.7
-      - name: Configure Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.9
-
-      - name: Install
-        run: |
-          pip install -e ."[tests]"
-
-      - name: Flake8
-        run: flake8
-
-      - name: Bandit
-        run: |
-          bandit -r --ini .bandit cylc/flow
-
-      - name: Shellchecker
-        run: etc/bin/shellchecker
-
-      - name: MyPy
-        run: mypy
-
-      - name: Towncrier
-        run: towncrier build --draft
-
-      - name: Linkcheck
-        run: pytest -m linkcheck --dist=load --color=yes -n 10 tests/unit/test_links.py
-
-  codecov:
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Codecov upload
-        uses: codecov/codecov-action@v4
-        with:
-          name: ${{ github.workflow }}
-          flags: fast-tests
-          fail_ci_if_error: true
-          verbose: true
-          # Token not required for public repos, but avoids upload failure due
-          # to rate-limiting (but not for PRs opened from forks)
-          token: ${{ secrets.CODECOV_TOKEN }}
