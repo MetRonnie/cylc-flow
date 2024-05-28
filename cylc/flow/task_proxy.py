@@ -304,7 +304,7 @@ class TaskProxy:
             )
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} '{self.tokens}'>"
+        return f"<{type(self).__name__} {self}>"
 
     def __str__(self) -> str:
         """Stringify with tokens, state, submit_num, and flow_nums.
