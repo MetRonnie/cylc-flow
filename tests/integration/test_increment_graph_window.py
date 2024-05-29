@@ -21,9 +21,10 @@ from cylc.flow.data_store_mgr import (
     TASK_PROXIES,
 )
 from cylc.flow.id import Tokens
+from cylc.flow.scheduler import Scheduler
 
 
-def increment_graph_window(schd, task):
+def increment_graph_window(schd: Scheduler, task: str):
     """Increment the graph window about the active task."""
     tokens = schd.tokens.duplicate(cycle='1', task=task)
     schd.data_store_mgr.increment_graph_window(
@@ -34,7 +35,7 @@ def increment_graph_window(schd, task):
     )
 
 
-def get_deltas(schd):
+def get_deltas(schd: Scheduler):
     """Return the ids and graph-window values in the delta store.
 
     Note, call before get_n_window as this clears the delta store.
@@ -155,7 +156,7 @@ async def test_increment_graph_window_blink(flow, scheduler, start):
             }
         }
     })
-    schd = scheduler(id_)
+    schd: Scheduler = scheduler(id_)
 
     # the tasks traversed via the "blink" task when...
     blink = {
