@@ -958,10 +958,9 @@ class DataStoreMgr:
                                 self.generate_ghost_task(
                                     child_tokens,
                                     child_point,
-                                    flow_nums,
-                                    False,
-                                    None,
-                                    n_depth
+                                    flow_nums,  # assume child inherits flow
+                                    is_parent=False,
+                                    n_depth=n_depth,
                                 )
                                 self.generate_edge(
                                     node_tokens,
@@ -988,10 +987,8 @@ class DataStoreMgr:
                                 self.generate_ghost_task(
                                     parent_tokens,
                                     parent_point,
-                                    flow_nums,
-                                    True,
-                                    None,
-                                    n_depth
+                                    is_parent=True,
+                                    n_depth=n_depth,
                                 )
                                 # reverse for parent
                                 self.generate_edge(
@@ -1153,7 +1150,7 @@ class DataStoreMgr:
         self,
         tokens: Tokens,
         point: 'PointBase',
-        flow_nums: 'FlowNums',
+        flow_nums: Optional['FlowNums'] = None,
         is_parent: bool = False,
         itask: Optional['TaskProxy'] = None,
         n_depth: int = 0,
