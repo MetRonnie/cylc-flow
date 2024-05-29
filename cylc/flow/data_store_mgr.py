@@ -795,8 +795,9 @@ class DataStoreMgr:
             source_tokens,
             point,
             flow_nums,
-            False,
-            itask
+            is_parent=False,
+            itask=itask,
+            replace_existing=True,
         )
 
         # Pre-populate from previous walks
@@ -1156,6 +1157,7 @@ class DataStoreMgr:
         is_parent: bool = False,
         itask: Optional['TaskProxy'] = None,
         n_depth: int = 0,
+        replace_existing: bool = False,
     ) -> None:
         """Create task-point element populated with static data.
 
@@ -1163,14 +1165,14 @@ class DataStoreMgr:
             source_tokens
             point
             flow_nums
-            is_parent:
-                Used to determine whether to load DB state.
-            itask:
-                Update task-node from corresponding task proxy object.
+            is_parent: Used to determine whether to load DB state.
+            itask: Update task-node from corresponding task proxy object.
             n_depth: n-window graph edge distance.
+            replace_existing: Replace existing data for task as it may
+                be out of date (e.g. flow nums).
         """
         tp_id = tokens.id
-        if (
+        if not replace_existing and (
             tp_id in self.data[self.workflow_id][TASK_PROXIES]
             or tp_id in self.added[TASK_PROXIES]
         ):
