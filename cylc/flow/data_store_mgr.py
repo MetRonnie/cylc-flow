@@ -113,6 +113,7 @@ from cylc.flow.wallclock import (
 if TYPE_CHECKING:
     from cylc.flow.cycling import PointBase
     from cylc.flow.flow_mgr import FlowNums
+    from cylc.flow.scheduler import Scheduler
 
 EDGES = 'edges'
 FAMILIES = 'families'
@@ -459,13 +460,15 @@ class DataStoreMgr:
     Arguments:
         schd (cylc.flow.scheduler.Scheduler):
             Workflow scheduler instance.
+        n_edge_distance (int):
+            Workflow graph window extent.
     """
 
     ERR_PREFIX_JOBID_MATCH = 'No matching jobs found: '
     ERR_PREFIX_JOB_NOT_ON_SEQUENCE = 'Invalid cycle point for job: '
 
     def __init__(self, schd, n_edge_distance=1):
-        self.schd = schd
+        self.schd: Scheduler = schd
         self.id_ = Tokens(
             user=self.schd.owner,
             workflow=self.schd.workflow,
@@ -512,7 +515,10 @@ class DataStoreMgr:
         self.n_window_completed_walks = set()
         self.n_window_depths = {}
         self.update_window_depths = False
-        self.db_load_task_proxies = {}
+        self.db_load_task_proxies: Dict[
+            str,
+            Tuple[TaskProxy, bool]  # (itask, is_parent)
+        ] = {}
         self.family_pruned_ids = set()
         self.prune_trigger_nodes = {}
         self.prune_flagged_nodes = set()
@@ -556,7 +562,7 @@ class DataStoreMgr:
         # Clear second batch after publishing
         self.clear_delta_batch()
 
-    def generate_definition_elements(self):
+    def generate_definition_elements(self) -> None:
         """Generate static definition data elements.
 
         Populates the tasks, families, and workflow elements
@@ -565,9 +571,9 @@ class DataStoreMgr:
         """
         config = self.schd.config
         update_time = time()
-        tasks = self.added[TASKS]
-        families = self.added[FAMILIES]
-        workflow = self.added[WORKFLOW]
+        tasks: Dict[str, PbTask] = self.added[TASKS]
+        families: Dict[str, PbFamily] = self.added[FAMILIES]
+        workflow: PbWorkflow = self.added[WORKFLOW]
         workflow.id = self.workflow_id
         workflow.n_edge_distance = self.n_edge_distance
         workflow.last_updated = update_time
@@ -1175,10 +1181,7 @@ class DataStoreMgr:
         t_id = self.definition_id(name)
 
         if itask is None:
-            itask = self.schd.pool.get_task(point_string, name)
-
-        if itask is None:
-            itask = TaskProxy(
+            itask = self.schd.pool.get_task(point_string, name) or TaskProxy(
                 self.id_,
                 self.schd.config.get_taskdef(name),
                 point,
@@ -1196,14 +1199,13 @@ class DataStoreMgr:
             self.generate_orphan_task(itask)
 
         # Most of the time the definition node will be in the store.
-        try:
-            task_def = self.data[self.workflow_id][TASKS][t_id]
-        except KeyError:
-            try:
-                task_def = self.added[TASKS][t_id]
-            except KeyError:
-                # Task removed from workflow definition.
-                return
+        task_def: Optional[PbTask] = self.data[self.workflow_id][TASKS].get(
+            t_id,
+            self.added[TASKS].get(t_id, None)
+        )
+        if task_def is None:
+            # Task removed from workflow definition.
+            return
 
         update_time = time()
         tp_stamp = f'{tp_id}@{update_time}'
@@ -1213,8 +1215,7 @@ class DataStoreMgr:
             task=t_id,
             cycle_point=point_string,
             is_held=(
-                (name, point)
-                in self.schd.pool.tasks_to_hold
+                (name, point) in self.schd.pool.tasks_to_hold
             ),
             depth=task_def.depth,
             graph_depth=n_depth,
@@ -1226,17 +1227,11 @@ class DataStoreMgr:
         tproxy.namespace[:] = task_def.namespace
         if is_orphan:
             tproxy.ancestors[:] = [
-                self.id_.duplicate(
-                    cycle=point_string,
-                    task='root',
-                ).id
+                self.id_.duplicate(cycle=point_string, task='root').id
             ]
         else:
             tproxy.ancestors[:] = [
-                self.id_.duplicate(
-                    cycle=point_string,
-                    task=a_name,
-                ).id
+                self.id_.duplicate(cycle=point_string, task=a_name).id
                 for a_name in self.ancestors[task_def.name]
                 if a_name != task_def.name
             ]
@@ -1246,10 +1241,7 @@ class DataStoreMgr:
         getattr(self.updated[WORKFLOW], TASK_PROXIES).append(tp_id)
         self.updated[TASKS].setdefault(
             t_id,
-            PbTask(
-                stamp=f'{t_id}@{update_time}',
-                id=t_id,
-            )
+            PbTask(stamp=f'{t_id}@{update_time}', id=t_id)
         ).proxies.append(tp_id)
         self.generate_ghost_family(tproxy.first_parent, child_task=tp_id)
         self.state_update_families.add(tproxy.first_parent)
@@ -1261,20 +1253,13 @@ class DataStoreMgr:
             # Cannot batch as task is active (all jobs retrieved at once).
             if itask.submit_num > 0:
                 flow_db = self.schd.workflow_db_mgr.pri_dao
-                for row in flow_db.select_jobs_for_datastore(
-                        {itask.identity}
-                ):
+                for row in flow_db.select_jobs_for_datastore({itask.identity}):
                     self.insert_db_job(1, row)
         else:
             # Batch non-active node for load of DB history.
-            self.db_load_task_proxies[itask.identity] = (
-                itask,
-                is_parent,
-            )
+            self.db_load_task_proxies[itask.identity] = (itask, is_parent)
 
         self.updates_pending = True
-
-        return
 
     def generate_orphan_task(self, itask):
         """Generate orphan task definition."""
@@ -1398,16 +1383,13 @@ class DataStoreMgr:
 
         flow_db = self.schd.workflow_db_mgr.pri_dao
 
-        task_ids = set(self.db_load_task_proxies.keys())
+        task_ids = self.db_load_task_proxies.keys()
         # Batch load rows with matching cycle & name column pairs.
         prereq_ids = set()
         for (
                 cycle, name, flow_nums_str, status, submit_num, outputs_str
         ) in flow_db.select_tasks_for_datastore(task_ids):
-            tokens = self.id_.duplicate(
-                cycle=cycle,
-                task=name,
-            )
+            tokens = self.id_.duplicate(cycle=cycle, task=name)
             relative_id = tokens.relative_id
             itask, is_parent = self.db_load_task_proxies[relative_id]
             itask.submit_num = submit_num
@@ -1439,13 +1421,9 @@ class DataStoreMgr:
         # Batch load prerequisites of tasks according to flow.
         prereqs_map = {}
         for (
-                cycle, name, prereq_name,
-                prereq_cycle, prereq_output, satisfied
+            cycle, name, prereq_name, prereq_cycle, prereq_output, satisfied
         ) in flow_db.select_prereqs_for_datastore(prereq_ids):
-            tokens = self.id_.duplicate(
-                cycle=cycle,
-                task=name,
-            )
+            tokens = self.id_.duplicate(cycle=cycle, task=name)
             prereqs_map.setdefault(tokens.relative_id, {})[
                 (prereq_cycle, prereq_name, prereq_output)
             ] = satisfied if satisfied != '0' else False
