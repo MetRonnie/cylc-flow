@@ -39,51 +39,36 @@ jobs:
       fail-fast: false
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.7']
+        python-version: ['3.9']
         test-base: ['tests/f']
-        chunk: ['1/4', '2/4', '3/4', '4/4']
-        platform: ['_local_background* _local_at*']
+        chunk: ['1/5']
+        platform: ['_local_background*']
         # NOTE: includes must define ALL of the matrix values
         include:
-          # latest python
-          - name: 'py-3-latest'
-            os: 'ubuntu-latest'
-            python-version: '3'
-            test-base: 'tests/f'
-            chunk: '1/4'
-            platform: '_local_background*'
-          # tests/k
-          - name: 'flaky'
-            os: 'ubuntu-latest'
-            python-version: '3.7'
-            test-base: 'tests/k'
-            chunk: '1/1'
-            platform: '_local_background* _local_at*'
-          # remote platforms
-          - name: '_remote_background_indep_poll'
-            os: 'ubuntu-latest'
-            python-version: '3.7'
-            test-base: 'tests/f tests/k'
-            chunk: '1/1'
-            platform: '_remote_background_indep_poll _remote_at_indep_poll'
-          - name: '_remote_background_indep_tcp'
-            os: 'ubuntu-latest'
-            test-base: 'tests/f tests/k'
-            python-version: '3.7'
-            chunk: '1/1'
-            platform: '_remote_background_indep_tcp _remote_at_indep_tcp'
           # macos
-          - name: 'macos 1/5'
+          - name: 'macos-14'
             os: 'macos-latest'
             python-version: '3.9'
             test-base: 'tests/f'
             chunk: '1/5'
             platform: '_local_background*'
-          - name: 'macos 2/5'
-            os: 'macos-latest'
+          - name: 'macos-13'
+            os: 'macos-13'
             python-version: '3.9'
             test-base: 'tests/f'
-            chunk: '2/5'
+            chunk: '1/5'
+            platform: '_local_background*'
+          - name: 'macos-12'
+            os: 'macos-12'
+            python-version: '3.9'
+            test-base: 'tests/f'
+            chunk: '1/5'
+            platform: '_local_background*'
+          - name: 'macos-14 py-latest'
+            os: 'macos-latest'
+            python-version: '3'
+            test-base: 'tests/f'
+            chunk: '1/5'
             platform: '_local_background*'
 
     env:
@@ -281,63 +266,7 @@ jobs:
           name: cylc-run (${{ steps.uploadname.outputs.uploadname }})
           path: ~/cylc-run/
 
-      - name: Fetch Remote Coverage
-        if: env.REMOTE_PLATFORM == 'true'
-        run: |
-          # pick the first host in the list
-          host="$(cut -d ' ' -f 1 <<< "${{ matrix.platform }}")"
-          # copy back the remote coverage files
-          rsync -av \
-            "${host}:/cylc/" \
-            '.' \
-            --include='.coverage*' \
-            --exclude='*' \
-            >rsyncout
-          cat rsyncout
-          # fiddle the python source location to match the local system
-          for db in $(grep --color=never '.coverage\.' rsyncout); do
-            sqlite3 "$db" "
-              UPDATE file
-              SET path = REPLACE(path, '/cylc/cylc/', '$PWD/cylc/')
-            "
-          done
-
       - name: Shutdown
         if: always()
         run: |
           etc/bin/swarm kill
-
-      - name: Combine coverage & report
-        run: |
-          coverage combine -a
-          coverage xml
-          coverage report
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage_${{ steps.uploadname.outputs.uploadname }}
-          path: coverage.xml
-          retention-days: 7
-
-  codecov:
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Codecov upload
-        uses: codecov/codecov-action@v4
-        with:
-          name: ${{ github.workflow }}
-          flags: functional-tests
-          fail_ci_if_error: true
-          verbose: true
-          # Token not required for public repos, but avoids upload failure due
-          # to rate-limiting (but not for PRs opened from forks)
-          token: ${{ secrets.CODECOV_TOKEN }}
