@@ -390,11 +390,7 @@ async def scheduler_cli(
 
     # check the workflow can be safely restarted with this version of Cylc
     db_file = Path(get_workflow_srv_dir(workflow_id), 'db')
-    if not _version_check(
-        db_file,
-        options.upgrade,
-        options.downgrade,
-    ):
+    if not _version_check(db_file, options):
         sys.exit(1)
 
     # upgrade the workflow DB (after user has confirmed upgrade)
@@ -474,8 +470,7 @@ async def _resume(workflow_id, options):
 
 def _version_check(
     db_file: Path,
-    can_upgrade: bool,
-    can_downgrade: bool
+    options: 'Values',
 ) -> bool:
     """Check the workflow can be safely restarted with this version of Cylc."""
     if not db_file.is_file():
@@ -491,7 +486,7 @@ def _version_check(
     )):
         if this < that:
             # restart would REDUCE the Cylc version
-            if can_downgrade:
+            if options.downgrade:
                 # permission to downgrade given in CLI flags
                 LOG.warning(
                     'Restarting with an older version of Cylc'
@@ -517,7 +512,7 @@ def _version_check(
             return False
         elif itt < 2 and this > that:
             # restart would INCREASE the Cylc version in a big way
-            if can_upgrade:
+            if options.upgrade:
                 # permission to upgrade given in CLI flags
                 LOG.warning(
                     'Restarting with a newer version of Cylc'
@@ -531,7 +526,7 @@ def _version_check(
             ))
             if is_terminal():
                 # we are in interactive mode, ask the user if this is ok
-                return prompt(
+                options.upgrade = prompt(
                     cparse(
                         'Are you sure you want to upgrade from'
                         f' <yellow>{last_run_version}</yellow>'
@@ -540,6 +535,7 @@ def _version_check(
                     {'y': True, 'n': False},
                     process=str.lower,
                 )
+                return options.upgrade
             # we are in non-interactive mode, abort abort abort
             print('Use "--upgrade" to upgrade the workflow.', file=sys.stderr)
             return False
