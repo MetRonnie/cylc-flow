@@ -132,6 +132,9 @@ jobs:
           python ./monitor.py &
           echo "MONITOR_PID=$!" >> $GITHUB_ENV
 
+          # sleep for a while to establish a baseline
+          sleep 10
+
       - name: Configure platforms
         run: |
           cat >> "$GLOBAL_CFG_PATH" << __HERE__
@@ -196,5 +199,6 @@ jobs:
       - name: Stop monitoring CPU
         if: always()
         run: |
+          sleep 10
           kill $MONITOR_PID
           cat ./cpu.txt

@@ -1,9 +1,15 @@
 import psutil
+from datetime import datetime
+
 
 def monitor():
-    while True:
-        with open('cpu.txt', 'a') as f:
-            print(psutil.cpu_percent(interval=5), file=f)
+    with open('cpu.txt', 'a') as f:
+        while True:
+            cpu = psutil.cpu_percent(interval=2)
+            tstamp = datetime.isoformat(datetime.now(), timespec='seconds')
+            print(f"{tstamp} {round(cpu) * '|'} ({cpu}%)", file=f)
+            f.flush()
+
 
 if __name__ == '__main__':
     monitor()
