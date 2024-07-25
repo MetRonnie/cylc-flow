@@ -52,21 +52,9 @@ jobs:
             test-base: 'tests/f'
             chunk: '1/5'
             platform: '_local_background*'
-          - name: 'macos-13'
-            os: 'macos-13'
-            python-version: '3.9'
-            test-base: 'tests/f'
-            chunk: '1/5'
-            platform: '_local_background*'
-          - name: 'macos-12'
-            os: 'macos-12'
-            python-version: '3.9'
-            test-base: 'tests/f'
-            chunk: '1/5'
-            platform: '_local_background*'
-          - name: 'macos-14 py-latest'
+          - name: 'macos-patch'
             os: 'macos-latest'
-            python-version: '3'
+            python-version: '3.9'
             test-base: 'tests/f'
             chunk: '1/5'
             platform: '_local_background*'
@@ -146,6 +134,10 @@ jobs:
         run: |
           pip install -e ."[all]"
           mkdir "$HOME/cylc-run"
+
+      - name: Apply patch
+        if: matrix.name == 'macos-patch'
+        run: git apply ./patch.diff
 
       - name: Configure Atrun
         if: contains(matrix.platform, '_local_at')
@@ -241,7 +233,7 @@ jobs:
             "${HOME}/cylc-run/${host}/"
 
       - name: Debug
-        if: failure() && steps.test.outcome == 'failure'
+        if: always()
         timeout-minutes: 1
         run: |
           find "$HOME/cylc-run" -name '*.err' -type f \
@@ -259,8 +251,8 @@ jobs:
           CID="$(sed 's|/|-|g' <<< "${{ matrix.name || matrix.chunk }}")"
           echo "uploadname=$CID" >> $GITHUB_OUTPUT
 
-      - name: Upload failed tests artifact
-        if: failure() && steps.test.outcome == 'failure'
+      - name: Upload tests artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cylc-run (${{ steps.uploadname.outputs.uploadname }})

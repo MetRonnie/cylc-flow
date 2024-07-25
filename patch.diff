@@ -1,0 +1,26 @@
+diff --git a/cylc/flow/network/__init__.py b/cylc/flow/network/__init__.py
+index 916b129e2..50378e3da 100644
+--- a/cylc/flow/network/__init__.py
++++ b/cylc/flow/network/__init__.py
+@@ -265,7 +265,7 @@ class ZMQSocketBase:
+ 
+         i.e. self.socket.sndhwm
+         """
+-        self.socket.sndhwm = 10000
++        self.socket.sndhwm = 100000
+ 
+     def _bespoke_start(self):
+         """Initiate bespoke items at start."""
+diff --git a/cylc/flow/network/publisher.py b/cylc/flow/network/publisher.py
+index 70d40d3cd..b2de71cf1 100644
+--- a/cylc/flow/network/publisher.py
++++ b/cylc/flow/network/publisher.py
+@@ -57,7 +57,7 @@ class WorkflowPublisher(ZMQSocketBase):
+         """
+         # this limit on messages in queue is more than enough,
+         # as messages correspond to scheduler loops (*messages/loop):
+-        self.socket.sndhwm = 1000
++        self.socket.sndhwm = 10000
+ 
+     def _bespoke_stop(self):
+         """Bespoke stop items."""

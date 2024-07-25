@@ -23,7 +23,7 @@ set_test_number 7
 install_workflow "${TEST_NAME_BASE}" "${TEST_NAME_BASE}"
 run_ok "${TEST_NAME_BASE}-validate" cylc validate "${WORKFLOW_NAME}"
 workflow_run_ok "${TEST_NAME_BASE}-start" \
-    cylc play "${WORKFLOW_NAME}" --mode=simulation --pause
+    cylc play "${WORKFLOW_NAME}" --mode=simulation --pause --profile
 SCHD_LOG="${WORKFLOW_RUN_DIR}/log/scheduler/log"
 
 # This broadcast will ensure that second_task will not finish

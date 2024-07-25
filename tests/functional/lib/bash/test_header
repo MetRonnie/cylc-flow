@@ -862,11 +862,11 @@ reftest_run() {
     if [[ -n "${REFTEST_OPTS:-}" ]]; then
         # shellcheck disable=SC2086
         workflow_run_ok "${TEST_NAME}" \
-            cylc play --reference-test --debug --no-detach \
+            cylc play --reference-test --debug --no-detach --profile \
             ${REFTEST_OPTS} "${WORKFLOW_NAME}"
     else
         workflow_run_ok "${TEST_NAME}" \
-            cylc play --reference-test --debug --no-detach \
+            cylc play --reference-test --debug --no-detach --profile \
             "${WORKFLOW_NAME}"
     fi
 }
