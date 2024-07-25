@@ -253,7 +253,6 @@ class Scheduler:
     is_reloaded = False
 
     # main loop
-    main_loop_intervals: deque = deque(maxlen=10)
     main_loop_plugins: Optional[dict] = None
     auto_restart_mode: Optional[AutoRestartMode] = None
     auto_restart_time: Optional[float] = None
@@ -1616,7 +1615,7 @@ class Scheduler:
             duration = self.INTERVAL_MAIN_LOOP - elapsed
         await asyncio.sleep(duration)
         # Record latest main loop interval
-        self.main_loop_intervals.append(time() - tinit)
+        LOG.debug(f"Main loop: {time() - tinit}s")
         # END MAIN LOOP
 
     def _update_workflow_state(self):

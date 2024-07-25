@@ -34,13 +34,12 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.name || matrix.chunk }}
-    timeout-minutes: 45
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         os: ['ubuntu-latest']
         python-version: ['3.9']
-        test-base: ['tests/f']
         chunk: ['1/5']
         platform: ['_local_background*']
         # NOTE: includes must define ALL of the matrix values
@@ -49,13 +48,6 @@ jobs:
           - name: 'macos-14'
             os: 'macos-latest'
             python-version: '3.9'
-            test-base: 'tests/f'
-            chunk: '1/5'
-            platform: '_local_background*'
-          - name: 'macos-patch'
-            os: 'macos-latest'
-            python-version: '3.9'
-            test-base: 'tests/f'
             chunk: '1/5'
             platform: '_local_background*'
 
@@ -135,71 +127,35 @@ jobs:
           pip install -e ."[all]"
           mkdir "$HOME/cylc-run"
 
-      - name: Apply patch
-        if: matrix.name == 'macos-patch'
-        run: git apply ./patch.diff
+      - name: Start monitoring CPU
+        run: |
+          python ./monitor.py &
+          echo "MONITOR_PID=$!" >> $GITHUB_ENV
 
-      - name: Configure Atrun
-        if: contains(matrix.platform, '_local_at')
+      - name: Configure platforms
         run: |
           cat >> "$GLOBAL_CFG_PATH" << __HERE__
             [platforms]
-                [[_local_at_indep_tcp]]
+                [[_local_background_indep_tcp]]
                     hosts = localhost
                     install target = localhost
-                    job runner = at
+                    job runner = background
           __HERE__
-
-      - name: Swarm Configure
-        run: |
-          etc/bin/swarm --yes --debug configure
-
-      - name: Swarm Build
-        if: env.REMOTE_PLATFORM == 'true'
-        run: |
-          # `swarm configure` seems to get ignored so override the user config
-          cp etc/conf/ssh_config $HOME/.ssh/config
-          # build and run the swarm
-          etc/bin/swarm --yes --debug build
-          etc/bin/swarm --yes --debug run
-          # test that it's up and running before proceeding
-          sleep 1
-          ssh -vv _remote_background_indep_poll hostname
 
       - name: Configure git  # Needed by the odd test
         uses: cylc/release-actions/configure-git@v1
 
-      - name: Filter Tests
-        env:
-          # NOTE: we only want the CHUNK set in this step else we will
-          # re-chunk tests later when they run
-          CHUNK: ${{ matrix.chunk }}
-        run: |
-          etc/bin/run-functional-tests \
-            --dry \
-            ${{ matrix.test-base }} \
-            > test-file
-          if [[ $REMOTE_PLATFORM == 'true' ]]; then
-            # skip tests that don't configure platform requirements
-            grep -l --color=never REQUIRE_PLATFORM $(cat test-file) > test-file
-          fi
-
       - name: Test
         id: test
-        timeout-minutes: 35
+        timeout-minutes: 10
         continue-on-error: true
         run: |
           echo "finished=false" >> $GITHUB_OUTPUT
-          if [[ '${{ matrix.test-base }}' == 'tests/k' ]]; then
-              NPROC=4
-          else
-              NPROC=8
-          fi
           # NOTE: test base is purposefully un-quoted
           etc/bin/run-functional-tests \
-              -j "${NPROC}" \
+              -j 1 \
               --state=save \
-              $(cat test-file) \
+              tests/functional/flow-triggers/11-wait-merge.t \
               || (echo "finished=true" >> $GITHUB_OUTPUT && false)
 
       - name: Time Out
@@ -210,27 +166,6 @@ jobs:
           cylc scan --state=all --format=rich --color-blind
           # fail the workflow
           false
-
-      - name: Re-run failed tests
-        timeout-minutes: 10
-        if: steps.test.outcome == 'failure' && steps.test.outputs.finished == 'true'
-        run: |
-          # re-run failed tests providing that they didn't time out first time
-          # TODO: make the tests deterministic so we don't need to do this
-          etc/bin/run-functional-tests \
-              -j 1 \
-              -v \
-              --state=save,failed $(cat test-file)
-
-      - name: Copy cylc-run out of container
-        if: failure() && steps.test.outcome == 'failure' && env.REMOTE_PLATFORM == 'true'
-        run: |
-          # pick the first host in the list
-          host="$(cut -d ' ' -f 1 <<< "${{ matrix.platform }}")"
-          # copy back the remote cylc-run dir
-          rsync -av \
-            "${host}:/root/cylc-run/" \
-            "${HOME}/cylc-run/${host}/"
 
       - name: Debug
         if: always()
@@ -258,7 +193,8 @@ jobs:
           name: cylc-run (${{ steps.uploadname.outputs.uploadname }})
           path: ~/cylc-run/
 
-      - name: Shutdown
+      - name: Stop monitoring CPU
         if: always()
         run: |
-          etc/bin/swarm kill
+          kill $MONITOR_PID
+          cat ./cpu.txt
