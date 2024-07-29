@@ -31,6 +31,7 @@ from cylc.flow import LOG, __version__
 from cylc.flow.exceptions import (
     ContactFileExists,
     CylcError,
+    InputError,
     ServiceFileError,
 )
 import cylc.flow.flags
@@ -366,11 +367,7 @@ async def scheduler_cli(
     functionality.
 
     """
-    if options.starttask:
-        options.starttask = upgrade_legacy_ids(
-            *options.starttask,
-            relative=True,
-        )
+    validate_opts(options)
 
     # Parse workflow name but delay Cylc 7 suite.rc deprecation warning
     # until after the start-up splash is printed.
@@ -654,4 +651,20 @@ async def _run(scheduler: Scheduler) -> int:
 @cli_function(get_option_parser)
 def play(parser: COP, options: 'Values', id_: str):
     """Implement cylc play."""
+    # Note: must validate CLI options in scheduler_cli(), otherwise the
+    # validation will not apply to `cylc vip`
     return asyncio.run(scheduler_cli(options, id_))
+
+
+def validate_opts(options: 'Values') -> None:
+    """Check and process CLI options."""
+    if options.downgrade and options.upgrade:
+        raise InputError(
+            "options --downgrade and --upgrade are mutually exclusive"
+        )
+
+    if options.starttask:
+        options.starttask = upgrade_legacy_ids(
+            *options.starttask,
+            relative=True,
+        )
