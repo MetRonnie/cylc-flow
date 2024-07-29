@@ -68,33 +68,31 @@ How to prevent reinstall deleting files:
   "cylc install" even if present in the source directory.
 """
 
-from pathlib import Path
 import sys
-from typing import Optional, TYPE_CHECKING, List, Callable
 from functools import partial
+from pathlib import Path
+from typing import (
+    TYPE_CHECKING,
+    Callable,
+    List,
+    Optional,
+)
 
 from ansimarkup import parse as cparse
 
-from cylc.flow.exceptions import (
-    ServiceFileError,
-    WorkflowFilesError,
-)
-from cylc.flow.install import (
-    reinstall_workflow,
-)
+from cylc.flow.exceptions import ServiceFileError, WorkflowFilesError
+from cylc.flow.install import reinstall_workflow
 from cylc.flow.network.multi import call_multi
 from cylc.flow.option_parsers import (
+    ID_MULTI_ARG_DOC,
+    CylcOption,
     CylcOptionParser as COP,
-    OptionSettings,
-    ID_MULTI_ARG_DOC
 )
 from cylc.flow.pathutil import get_workflow_run_dir
 from cylc.flow.plugins import run_plugins_async
-from cylc.flow.workflow_files import (
-    get_workflow_source_dir,
-    load_contact_file,
-)
-from cylc.flow.terminal import cli_function, DIM, is_terminal
+from cylc.flow.terminal import DIM, cli_function, is_terminal
+from cylc.flow.workflow_files import get_workflow_source_dir, load_contact_file
+
 
 if TYPE_CHECKING:
     from optparse import Values
@@ -102,8 +100,8 @@ if TYPE_CHECKING:
 _input = input  # to enable testing
 
 REINSTALL_CYLC_ROSE_OPTIONS = [
-    OptionSettings(
-        ['--clear-rose-install-options'],
+    CylcOption(
+        '--clear-rose-install-options',
         help="Clear options previously set by cylc-rose.",
         action='store_true',
         default=False,
@@ -113,8 +111,8 @@ REINSTALL_CYLC_ROSE_OPTIONS = [
 ]
 
 REINSTALL_OPTIONS = [
-    OptionSettings(
-        ["--yes"],
+    CylcOption(
+        "--yes",
         help='Skip interactive prompts.',
         action="store_true",
         default=False,
@@ -144,7 +142,7 @@ def get_option_parser() -> COP:
         options = REINSTALL_CYLC_ROSE_OPTIONS + REINSTALL_OPTIONS
 
     for option in options:
-        parser.add_option(*option.args, **option.kwargs)
+        parser.add_option(*option.opts, **option.attrs)
 
     return parser
 

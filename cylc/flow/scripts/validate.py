@@ -26,36 +26,38 @@ use 'cylc view -i,--inline WORKFLOW' for comparison.
 """
 
 import asyncio
-from ansimarkup import parse as cparse
-from copy import deepcopy
 import sys
+from copy import deepcopy
 from typing import TYPE_CHECKING
 
+from ansimarkup import parse as cparse
+
+import cylc.flow.flags
 from cylc.flow import LOG, __version__ as CYLC_VERSION
 from cylc.flow.config import WorkflowConfig
 from cylc.flow.exceptions import (
-    WorkflowConfigError,
     TaskProxySequenceBoundsError,
-    TriggerExpressionError
+    TriggerExpressionError,
+    WorkflowConfigError,
 )
-import cylc.flow.flags
 from cylc.flow.id import Tokens
 from cylc.flow.id_cli import parse_id_async
 from cylc.flow.loggingutil import set_timestamps
 from cylc.flow.option_parsers import (
     AGAINST_SOURCE_OPTION,
-    WORKFLOW_ID_OR_PATH_ARG_DOC,
-    CylcOptionParser as COP,
-    OptionSettings,
-    Options,
     ICP_OPTION,
+    WORKFLOW_ID_OR_PATH_ARG_DOC,
+    CylcOption,
+    CylcOptionParser as COP,
+    Options,
 )
 from cylc.flow.profiler import Profiler
+from cylc.flow.scheduler_cli import RUN_MODE
 from cylc.flow.task_proxy import TaskProxy
 from cylc.flow.templatevars import get_template_vars
 from cylc.flow.terminal import cli_function
-from cylc.flow.scheduler_cli import RUN_MODE
 from cylc.flow.workflow_status import RunMode
+
 
 if TYPE_CHECKING:
     from cylc.flow.option_parsers import Values
@@ -70,8 +72,8 @@ VALIDATE_AGAINST_SOURCE_OPTION.sources = {'validate'}
 
 
 VALIDATE_OPTIONS = [
-    OptionSettings(
-        ["--check-circular"],
+    CylcOption(
+        "--check-circular",
         help=(
             "Check for circular dependencies in graphs when the number of"
             " tasks is greater than 100 (smaller graphs are always"
@@ -82,16 +84,16 @@ VALIDATE_OPTIONS = [
         dest="check_circular",
         sources={'validate'}
     ),
-    OptionSettings(
-        ["--output", "-o"],
+    CylcOption(
+        "--output", "-o",
         help="Specify a file name to dump the processed flow.cylc.",
         metavar="FILENAME",
         action="store",
         dest="output",
         sources={'validate'}
     ),
-    OptionSettings(
-        ["--profile"],
+    CylcOption(
+        "--profile",
         help="Output profiling (performance) information",
         action="store_true",
         default=False,
@@ -115,7 +117,7 @@ def get_option_parser():
         *VALIDATE_OPTIONS,
         VALIDATE_AGAINST_SOURCE_OPTION,
     ]:
-        parser.add_option(*option.args, **option.kwargs)
+        parser.add_option(*option.opts, **option.attrs)
 
     parser.set_defaults(is_validate=True)
 

@@ -14,27 +14,44 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from contextlib import redirect_stdout
 import io
+import shlex
 import sys
+from contextlib import redirect_stdout
 from types import SimpleNamespace
-from typing import List
+from typing import Iterable, List
 
 import pytest
 from pytest import param
 
 import cylc.flow.flags
 from cylc.flow.option_parsers import (
-    CylcOptionParser as COP, Options, combine_options, combine_options_pair,
-    OptionSettings, cleanup_sysargv, filter_sysargv
+    CylcOption,
+    CylcOptionParser as COP,
+    Options,
+    cleanup_sysargv,
+    combine_options,
+    combine_options_pair,
+    filter_sysargv,
 )
+from cylc.flow.scripts.install import INSTALL_OPTIONS
 
 
 USAGE_WITH_COMMENT = "usage \n # comment"
-ARGS = 'args'
-KWARGS = 'kwargs'
+OPTS = 'opts'
+ATTRS = 'attrs'
 SOURCES = 'sources'
 USEIF = 'useif'
+
+
+def get_option_by_name(
+    opts: Iterable[CylcOption], name: str
+) -> CylcOption:
+    """Get an CylcOption object by name from a list of CylcOptions."""
+    try:
+        return next((x for x in opts if x.dest == name))
+    except StopIteration:
+        raise ValueError(name)
 
 
 @pytest.fixture(scope='module')
@@ -110,132 +127,79 @@ def test_Options_std_opts():
     'first, second, expect',
     [
         param(
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'do'}}],
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'dont'}}],
-            (
-                [{
-                    ARGS: ['-f', '--foo'], KWARGS: {},
-                    SOURCES: {'do', 'dont'}, USEIF: ''
-                }]
-            ),
-            id='identical arg lists unchanged'
+            [CylcOption('-f', '--foo', sources={'do'})],
+            [CylcOption('-f', '--foo', sources={'dont'})],
+            [CylcOption('-f', '--foo', sources={'do', 'dont'})],
+            id='identical arg lists unchanged',
         ),
         param(
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'fall'}}],
-            [{
-                ARGS: ['-f', '--foolish'],
-                KWARGS: {'help': 'not identical'},
-                SOURCES: {'fold'}}],
-            (
-                [
-                    {
-                        ARGS: ['--foo'], KWARGS: {}, SOURCES: {'fall'},
-                        USEIF: ''
-                    },
-                    {
-                        ARGS: ['--foolish'],
-                        KWARGS: {'help': 'not identical'},
-                        SOURCES: {'fold'},
-                        USEIF: ''
-                    }
-                ]
-            ),
-            id='different arg lists lose shared names'
+            [CylcOption('-f', '--foo', sources={'fall'})],
+            [
+                CylcOption(
+                    '-f', '--foolish', sources={'fold'}, help='not identical'
+                )
+            ],
+            [
+                CylcOption('--foo', sources={'fall'}),
+                CylcOption(
+                    '--foolish', sources={'fold'}, help='not identical'
+                ),
+            ],
+            id='different arg lists lose shared names',
         ),
         param(
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'cook'}}],
-            [{
-                ARGS: ['-f', '--foo'],
-                KWARGS: {'help': 'not identical', 'dest': 'foobius'},
-                SOURCES: {'bake'},
-                USEIF: ''
-            }],
+            [CylcOption('-f', '--foo', sources={'cook'})],
+            [
+                CylcOption(
+                    '-f', '--foo',
+                    sources={'bake'}, help='not identical', dest='foobius',
+                )
+            ],
             None,
-            id='different args identical arg list cause exception'
+            id='different args identical arg list cause exception',
         ),
         param(
-            [{ARGS: ['-g', '--goo'], KWARGS: {}, SOURCES: {'knit'}}],
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'feed'}}],
+            [CylcOption('-g', '--goo', sources={'knit'})],
+            [CylcOption('-f', '--foo', sources={'feed'})],
             [
-                {
-                    ARGS: ['-g', '--goo'], KWARGS: {},
-                    SOURCES: {'knit'}, USEIF: ''
-                },
-                {
-                    ARGS: ['-f', '--foo'], KWARGS: {},
-                    SOURCES: {'feed'}, USEIF: ''
-                },
+                CylcOption('-g', '--goo', sources={'knit'}),
+                CylcOption('-f', '--foo', sources={'feed'}),
             ],
-            id='all unrelated args added'
+            id='all unrelated args added',
         ),
         param(
             [
-                {ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'work'}},
-                {ARGS: ['-r', '--redesdale'], KWARGS: {}, SOURCES: {'work'}}
+                CylcOption('-f', '--foo', sources={'work'}),
+                CylcOption('-r', '--redesdale', sources={'work'}),
             ],
             [
-                {ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'sink'}},
-                {
-                    ARGS: ['-b', '--buttered-peas'],
-                    KWARGS: {}, SOURCES: {'sink'}
-                }
+                CylcOption('-f', '--foo', sources={'sink'}),
+                CylcOption('-b', '--buttered-peas', sources={'sink'}),
             ],
             [
-                {
-                    ARGS: ['-f', '--foo'],
-                    KWARGS: {},
-                    SOURCES: {'work', 'sink'},
-                    USEIF: ''
-                },
-                {
-                    ARGS: ['-b', '--buttered-peas'],
-                    KWARGS: {},
-                    SOURCES: {'sink'},
-                    USEIF: ''
-                },
-                {
-                    ARGS: ['-r', '--redesdale'],
-                    KWARGS: {},
-                    SOURCES: {'work'},
-                    USEIF: ''
-                },
+                CylcOption('-f', '--foo', sources={'work', 'sink'}),
+                CylcOption('-b', '--buttered-peas', sources={'sink'}),
+                CylcOption('-r', '--redesdale', sources={'work'}),
             ],
-            id='do not repeat args'
+            id='do not repeat args',
         ),
         param(
-            [
-                {
-                    ARGS: ['-f', '--foo'],
-                    KWARGS: {},
-                    SOURCES: {'push'}
-                },
-            ],
+            [CylcOption('-f', '--foo', sources={'push'})],
             [],
-            [
-                {
-                    ARGS: ['-f', '--foo'],
-                    KWARGS: {},
-                    SOURCES: {'push'},
-                    USEIF: ''
-                },
-            ],
-            id='one empty list is fine'
-        )
-    ]
+            [CylcOption('-f', '--foo', sources={'push'})],
+            id='one empty list is fine',
+        ),
+    ],
 )
 def test_combine_options_pair(first, second, expect):
     """It combines sets of options"""
-    first = [
-        OptionSettings(i[ARGS], sources=i[SOURCES], **i[KWARGS])
-        for i in first
-    ]
-    second = [
-        OptionSettings(i[ARGS], sources=i[SOURCES], **i[KWARGS])
-        for i in second
-    ]
     if expect is not None:
         result = combine_options_pair(first, second)
-        assert [i.__dict__ for i in result] == expect
+        assert [
+            (o.opts, o.sources, o.useif, o.attrs) for o in result
+        ] == [
+            (o.opts, o.sources, o.useif, o.attrs) for o in expect
+        ]
     else:
         with pytest.raises(Exception, match='Clashing Options'):
             combine_options_pair(first, second)
@@ -246,48 +210,48 @@ def test_combine_options_pair(first, second, expect):
     [
         param(
             [
-                ([OptionSettings(
-                    ['-i', '--inflammable'], help='', sources={'wish'}
+                ([CylcOption(
+                    '-i', '--inflammable', help='', sources={'wish'}
                 )]),
-                ([OptionSettings(
-                    ['-f', '--flammable'], help='', sources={'rest'}
+                ([CylcOption(
+                    '-f', '--flammable', help='', sources={'rest'}
                 )]),
-                ([OptionSettings(
-                    ['-n', '--non-flammable'], help='', sources={'swim'}
+                ([CylcOption(
+                    '-n', '--non-flammable', help='', sources={'swim'}
                 )]),
             ],
             [
-                {ARGS: ['-i', '--inflammable']},
-                {ARGS: ['-f', '--flammable']},
-                {ARGS: ['-n', '--non-flammable']}
+                {OPTS: {'-i', '--inflammable'}},
+                {OPTS: {'-f', '--flammable'}},
+                {OPTS: {'-n', '--non-flammable'}}
             ],
             id='merge three argsets no overlap'
         ),
         param(
             [
                 [
-                    OptionSettings(
-                        ['-m', '--morpeth'], help='', sources={'stop'}),
-                    OptionSettings(
-                        ['-r', '--redesdale'], help='', sources={'stop'}),
+                    CylcOption(
+                        '-m', '--morpeth', help='', sources={'stop'}),
+                    CylcOption(
+                        '-r', '--redesdale', help='', sources={'stop'}),
                 ],
                 [
-                    OptionSettings(
-                        ['-b', '--byker'], help='', sources={'walk'}),
-                    OptionSettings(
-                        ['-r', '--roxborough'], help='', sources={'walk'}),
+                    CylcOption(
+                        '-b', '--byker', help='', sources={'walk'}),
+                    CylcOption(
+                        '-r', '--roxborough', help='', sources={'walk'}),
                 ],
                 [
-                    OptionSettings(
-                        ['-b', '--bellingham'], help='', sources={'leap'}),
+                    CylcOption(
+                        '-b', '--bellingham', help='', sources={'leap'}),
                 ]
             ],
             [
-                {ARGS: ['--bellingham']},
-                {ARGS: ['--roxborough']},
-                {ARGS: ['--redesdale']},
-                {ARGS: ['--byker']},
-                {ARGS: ['-m', '--morpeth']}
+                {OPTS: {'--bellingham'}},
+                {OPTS: {'--roxborough'}},
+                {OPTS: {'--redesdale'}},
+                {OPTS: {'--byker'}},
+                {OPTS: {'-m', '--morpeth'}}
             ],
             id='merge three overlapping argsets'
         ),
@@ -296,13 +260,13 @@ def test_combine_options_pair(first, second, expect):
                 ([]),
                 (
                     [
-                        OptionSettings(
-                            ['-c', '--campden'], help='x', sources={'foo'})
+                        CylcOption(
+                            '-c', '--campden', help='x', sources={'foo'})
                     ]
                 )
             ],
             [
-                {ARGS: ['-c', '--campden']}
+                {OPTS: {'-c', '--campden'}}
             ],
             id="empty list doesn't clear result"
         ),
@@ -311,11 +275,11 @@ def test_combine_options_pair(first, second, expect):
 def test_combine_options(inputs, expect):
     """It combines multiple input sets"""
     result = combine_options(*inputs)
-    result_args = [i.args for i in result]
+    result_args = [i.opts for i in result]
 
     # Order of args irrelevent to test
     for option in expect:
-        assert option[ARGS] in result_args
+        assert option[OPTS] in result_args
 
 
 @pytest.mark.parametrize(
@@ -327,12 +291,12 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--foo', '-f']),
-                    OptionSettings(['--bar', '-b'], action='store'),
-                    OptionSettings(['--baz'], action='store_true'),
+                    CylcOption('--foo', '-f'),
+                    CylcOption('--bar', '-b', action='store'),
+                    CylcOption('--baz', action='store_true'),
                 ],
                 'script_opts': [
-                    OptionSettings(['--foo', '-f']),
+                    CylcOption('--foo', '-f'),
                 ]
             },
             'play myworkflow -f something',
@@ -344,9 +308,9 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--foo', '-f']),
-                    OptionSettings(['--bar', '-b']),
-                    OptionSettings(['--baz']),
+                    CylcOption('--foo', '-f'),
+                    CylcOption('--bar', '-b'),
+                    CylcOption('--baz'),
                 ],
                 'script_opts': []
             },
@@ -359,9 +323,9 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--foo', '-f'])],
+                    CylcOption('--foo', '-f')],
                 'script_opts': [
-                    OptionSettings(['--foo', '-f']),
+                    CylcOption('--foo', '-f'),
                 ],
                 'source': './myworkflow',
             },
@@ -374,9 +338,9 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--foo', '-f'])],
+                    CylcOption('--foo', '-f')],
                 'script_opts': [
-                    OptionSettings(['--foo', '-f']),
+                    CylcOption('--foo', '-f'),
                 ],
                 'source': './myworkflow',
             },
@@ -389,11 +353,11 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--workflow-name', '-n']),
-                    OptionSettings(['--no-run-name']),
+                    CylcOption('--workflow-name', '-n'),
+                    CylcOption('--no-run-name'),
                 ],
                 'script_opts': [
-                    OptionSettings(['--not-used']),
+                    CylcOption('--not-used'),
                 ]
             },
             'play myworkflow',
@@ -410,11 +374,13 @@ def test_cleanup_sysargv(
     """It replaces the contents of sysargv with Cylc Play argv items.
     """
     # Fake up sys.argv: for this test.
-    dummy_cylc_path = ['/pathto/my/cylc/bin/cylc']
-    monkeypatch.setattr(sys, 'argv', dummy_cylc_path + argv_before.split())
+    dummy_cylc_path = '/pathto/my/cylc/bin/cylc'
+    monkeypatch.setattr(
+        sys, 'argv', [dummy_cylc_path, *shlex.split(argv_before)]
+    )
     # Fake options too:
     opts = SimpleNamespace(**{
-        i.args[0].replace('--', ''): i for i in kwargs['compound_script_opts']
+        i.dest: i for i in kwargs['compound_script_opts']
     })
 
     kwargs.update({'options': opts})
@@ -423,98 +389,141 @@ def test_cleanup_sysargv(
 
     # Test the script:
     cleanup_sysargv(**kwargs)
-    assert sys.argv == dummy_cylc_path + expect.split()
+    assert sys.argv == [dummy_cylc_path, *shlex.split(expect)]
 
 
 @pytest.mark.parametrize(
-    'sysargs, simple, compound, expect', (
+    'sysargs, opts, expect', (
         param(
             # Test for https://github.com/cylc/cylc-flow/issues/5905
-            '--no-run-name --workflow-name=name'.split(),
-            ['--no-run-name'],
-            ['--workflow-name'],
+            '--no-run-name --workflow-name=name',
+            [
+                get_option_by_name(INSTALL_OPTIONS, 'no_run_name'),
+                get_option_by_name(INSTALL_OPTIONS, 'workflow_name'),
+            ],
             [],
             id='--workflow-name=name'
         ),
         param(
-            '--foo something'.split(),
-            [], [], '--foo something'.split(),
+            '--foo something',
+            [],
+            ['--foo', 'something'],
             id='no-opts-removed'
         ),
         param(
-            [], ['--foo'], ['--bar'], [],
+            '',
+            [
+                CylcOption('--foo', action='store'),
+            ],
+            [],
             id='Null-check'
         ),
         param(
             '''--keep1 --keep2 42 --keep3=Hi
-            --throw1 --throw2 84 --throw3=There
-            '''.split(),
-            ['--throw1'],
-            '--throw2 --throw3'.split(),
-            '--keep1 --keep2 42 --keep3=Hi'.split(),
+            --throw1 --throw2 84 --throw3=There''',
+            [
+                CylcOption('--throw1', action='store_true'),
+                CylcOption('--throw2', action='store'),
+                CylcOption('--throw3', action='store'),
+            ],
+            ['--keep1', '--keep2', '42', '--keep3=Hi'],
             id='complex'
         ),
         param(
-            "--foo 'foo=42' --bar='foo=94'".split(),
-            [], ['--foo'],
-            ['--bar=\'foo=94\''],
-            id='--bar=\'foo=94\''
+            "--foo '--foo=42' --bar='--foo=94' --baz '--foo 26'",
+            [
+                CylcOption('--foo', action='append'),
+            ],
+            ["--bar=--foo=94", "--baz", "--foo 26"],
+            id="fiendish"
+        ),
+        param(
+            "--foo 1 --fool 2",
+            [
+                CylcOption('--foo', action='store'),
+            ],
+            ["--fool", "2"],
+            id="substring"
+        ),
+        param(
+            "-v -v -x",
+            [
+                CylcOption('-v', action='count', dest='verbosity'),
+            ],
+            ['-x'],
+            id="remove-multiple"
+        ),
+        param(
+            "-f --bar",
+            [
+                CylcOption('--foo', '-f', action='count', dest='bar'),
+            ],
+            ['--bar'],
+            id="short-n-long"
+        ),
+        param(
+            "cylc frobnicate --quiet jbloggs --dir run1 jdoe",
+            [
+                CylcOption(
+                    '--quiet', action='decrement', dest='verbosity'
+                ),
+                CylcOption('--dir', action='store'),
+            ],
+            ['cylc', 'frobnicate', 'jbloggs', 'jdoe'],
+            id="non-typed-opt"
         )
     )
 )
 def test_filter_sysargv(
-    sysargs, simple, compound, expect
+    sysargs: str, opts: List[CylcOption], expect: List[str]
 ):
-    """It returns the subset of sys.argv that we ask for.
-
-    n.b. The three most basic cases for this function are stored in
-    its own docstring.
-    """
-    assert filter_sysargv(sysargs, simple, compound) == expect
+    """It returns the subset of sys.argv that we ask for."""
+    assert filter_sysargv(shlex.split(sysargs), *opts) == expect
 
 
-class TestOptionSettings():
+class TestCylcOption():
     @staticmethod
     def test_init():
-        args = ['--foo', '-f']
-        kwargs = {'bar': 42}
+        opts = ['--foo', '-f']
+        attrs = {'metavar': 'FOO'}
         sources = {'touch'}
         useif = 'hello'
 
-        result = OptionSettings(
-            args, sources=sources, useif=useif, **kwargs)
+        result = CylcOption(*opts, sources=sources, useif=useif, **attrs)
 
-        assert result.__dict__ == {
-            'kwargs': kwargs, 'sources': sources,
-            'useif': useif, 'args': args
-        }
+        assert result.opts == set(opts)
+        assert result.attrs == attrs
+        assert result.sources == sources
+        assert result.useif == useif
 
     @staticmethod
     @pytest.mark.parametrize(
         'first, second, expect',
         (
             param(
-                (['--foo', '-f'], {'bar': 42}, {'touch'}, 'hello'),
-                (['--foo', '-f'], {'bar': 42}, {'touch'}, 'hello'),
-                True, id='Totally the same'),
+                CylcOption('--foo', '-f', sources={'touch'}, useif='hello'),
+                CylcOption('--foo', '-f', sources={'touch'}, useif='hello'),
+                True,
+                id='Totally the same'
+            ),
             param(
-                (['--foo', '-f'], {'bar': 42}, {'touch'}, 'hello'),
-                (['--foo', '-f'], {'bar': 42}, {'wibble'}, 'byee'),
-                True, id='Differing extras'),
+                CylcOption('--foo', '-f', sources={'touch'}, useif='hello'),
+                CylcOption('--foo', '-f', sources={'wibble'}, useif='byee'),
+                True,
+                id='Differing extras'
+            ),
             param(
-                (['-f'], {'bar': 42}, {'touch'}, 'hello'),
-                (['--foo', '-f'], {'bar': 42}, {'wibble'}, 'byee'),
-                False, id='Not equal args'),
+                CylcOption('-f', sources={'touch'}, useif='hello'),
+                CylcOption('--foo', '-f', sources={'wibble'}, useif='byee'),
+                False,
+                id='Not equal opts'
+            ),
         )
     )
-    def test___eq__args_intersection(first, second, expect):
-        args, kwargs, sources, useif = first
-        first = OptionSettings(
-            args, sources=sources, useif=useif, **kwargs)
-        args, kwargs, sources, useif = second
-        second = OptionSettings(
-            args, sources=sources, useif=useif, **kwargs)
-        assert (first == second) == expect
+    def test_match(
+        first: CylcOption, second: CylcOption, expect: bool
+    ):
+        assert first.match(second) == expect
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -523,24 +532,24 @@ class TestOptionSettings():
             param(
                 ['--foo', '-f'],
                 ['--foo', '-f'],
-                ['--foo', '-f'],
+                {'--foo', '-f'},
                 id='Totally the same'),
             param(
                 ['--foo', '-f'],
                 ['--foolish', '-f'],
-                ['-f'],
+                {'-f'},
                 id='Some overlap'),
             param(
                 ['--foo', '-f'],
                 ['--bar', '-b'],
-                [],
+                set(),
                 id='No overlap'),
         )
     )
     def test___and__(first, second, expect):
-        first = OptionSettings(first)
-        second = OptionSettings(second)
-        assert sorted(first & second) == sorted(expect)
+        first = CylcOption(*first)
+        second = CylcOption(*second)
+        assert first & second == expect
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -549,34 +558,34 @@ class TestOptionSettings():
             param(
                 ['--foo', '-f'],
                 ['--foo', '-f'],
-                [],
+                set(),
                 id='Totally the same'),
             param(
                 ['--foo', '-f'],
                 ['--foolish', '-f'],
-                ['--foo'],
+                {'--foo'},
                 id='Some overlap'),
             param(
                 ['--foolish', '-f'],
                 ['--foo', '-f'],
-                ['--foolish'],
+                {'--foolish'},
                 id='Some overlap not commuting'),
             param(
                 ['--foo', '-f'],
                 ['--bar', '-b'],
-                ['--foo', '-f'],
+                {'--foo', '-f'},
                 id='No overlap'),
         )
     )
-    def test___sub__args_subtraction(first, second, expect):
-        first = OptionSettings(first)
-        second = OptionSettings(second)
-        assert sorted(first - second) == sorted(expect)
+    def test___sub__(first, second, expect):
+        first = CylcOption(*first)
+        second = CylcOption(*second)
+        assert first - second == expect
 
     @staticmethod
     def test__in_list():
         """It is in a list."""
-        first = OptionSettings(['--foo'])
-        second = OptionSettings(['--foo'])
-        third = OptionSettings(['--bar'])
+        first = CylcOption('--foo')
+        second = CylcOption('--foo')
+        third = CylcOption('--bar')
         assert first._in_list([second, third]) is True

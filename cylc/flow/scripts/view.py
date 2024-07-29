@@ -104,7 +104,7 @@ def get_option_parser():
              action="store_true", default=False, dest="cat")
 
     parser.add_option(
-        *AGAINST_SOURCE_OPTION.args, **AGAINST_SOURCE_OPTION.kwargs)
+        *AGAINST_SOURCE_OPTION.opts, **AGAINST_SOURCE_OPTION.attrs)
 
     parser.add_cylc_rose_options()
 

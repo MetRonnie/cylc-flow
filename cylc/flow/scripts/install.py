@@ -80,44 +80,50 @@ The same workflow can be installed with multiple names; this results in
 multiple workflow run directories that link to the same workflow definition.
 """
 
-from ansimarkup import ansiprint as cprint
 import asyncio
 from optparse import Values
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import (
+    Any,
+    Dict,
+    Optional,
+    Tuple,
+)
+
+from ansimarkup import ansiprint as cprint
 
 from cylc.flow import LOG
 from cylc.flow.exceptions import InputError
+from cylc.flow.install import (
+    check_deprecation,
+    install_workflow,
+    parse_cli_sym_dirs,
+    search_install_source_dirs,
+)
 from cylc.flow.loggingutil import CylcLogFormatter, set_timestamps
 from cylc.flow.option_parsers import (
+    CylcOption,
     CylcOptionParser as COP,
-    OptionSettings,
-    Options
+    Options,
 )
 from cylc.flow.pathutil import (
     EXPLICIT_RELATIVE_PATH_REGEX,
     expand_path,
-    get_workflow_run_dir
+    get_workflow_run_dir,
 )
 from cylc.flow.plugins import run_plugins_async
-from cylc.flow.install import (
-    install_workflow,
-    parse_cli_sym_dirs,
-    search_install_source_dirs,
-    check_deprecation,
-)
 from cylc.flow.scripts.scan import (
-    get_pipe,
-    _format_plain,
+    FLOW_STATE_CMAP,
     FLOW_STATE_SYMBOLS,
-    FLOW_STATE_CMAP
+    _format_plain,
+    get_pipe,
 )
 from cylc.flow.terminal import cli_function
 
 
 INSTALL_OPTIONS = [
-    OptionSettings(
-        ["--workflow-name", "-n"],
+    CylcOption(
+        "--workflow-name", "-n",
         help="Install into ~/cylc-run/<WORKFLOW_NAME>/runN ",
         action="store",
         metavar="WORKFLOW_NAME",
@@ -125,8 +131,8 @@ INSTALL_OPTIONS = [
         dest="workflow_name",
         sources={'install'},
     ),
-    OptionSettings(
-        ["--symlink-dirs"],
+    CylcOption(
+        "--symlink-dirs",
         help=(
             "Enter a comma-delimited list, in the form"
             " 'log=path/to/store, share = $HOME/some/path, ...'."
@@ -138,8 +144,8 @@ INSTALL_OPTIONS = [
         dest="symlink_dirs",
         sources={'install'},
     ),
-    OptionSettings(
-        ["--run-name", "-r"],
+    CylcOption(
+        "--run-name", "-r",
         help=(
             "Give the run a custom name instead of automatically"
             " numbering it."),
@@ -149,8 +155,8 @@ INSTALL_OPTIONS = [
         dest="run_name",
         sources={'install'},
     ),
-    OptionSettings(
-        ["--no-run-name"],
+    CylcOption(
+        "--no-run-name",
         help=(
             "Install the workflow directly into"
             " ~/cylc-run/<workflow_name>,"
@@ -160,8 +166,8 @@ INSTALL_OPTIONS = [
         dest="no_run_name",
         sources={'install'},
     ),
-    OptionSettings(
-        ['--no-ping'],
+    CylcOption(
+        '--no-ping',
         help=(
             "When scanning for active instances of the workflow, "
             "do not attempt to contact the schedulers to get status."),
@@ -188,7 +194,7 @@ def get_option_parser() -> COP:
     options = parser.get_cylc_rose_options() + INSTALL_OPTIONS
 
     for option in options:
-        parser.add_option(*option.args, **option.kwargs)
+        parser.add_option(*option.opts, **option.attrs)
 
     return parser
 

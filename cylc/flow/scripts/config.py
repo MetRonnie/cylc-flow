@@ -132,7 +132,7 @@ def get_option_parser() -> COP:
     )
 
     parser.add_option(
-        *AGAINST_SOURCE_OPTION.args, **AGAINST_SOURCE_OPTION.kwargs)
+        *AGAINST_SOURCE_OPTION.opts, **AGAINST_SOURCE_OPTION.attrs)
 
     parser.add_cylc_rose_options()
 

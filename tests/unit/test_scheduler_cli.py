@@ -263,5 +263,6 @@ def test_distribute_colour(
     _is_terminal = monkeymock('cylc.flow.scheduler_cli.is_terminal')
     _is_terminal.return_value = is_terminal
     _cylc_server_cmd = monkeymock('cylc.flow.scheduler_cli.cylc_server_cmd')
-    _distribute('myhost', 'foo', 'foo/run1', cli_colour)
+    opts = RunOptions(host='myhost', color=cli_colour)
+    _distribute('foo', 'foo/run1', opts)
     assert distribute_colour in _cylc_server_cmd.call_args[0][0]

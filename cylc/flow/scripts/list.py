@@ -97,7 +97,7 @@ def get_option_parser():
         metavar="[START],[STOP]", action="store", default=None, dest="prange")
 
     parser.add_option(
-        *AGAINST_SOURCE_OPTION.args, **AGAINST_SOURCE_OPTION.kwargs)
+        *AGAINST_SOURCE_OPTION.opts, **AGAINST_SOURCE_OPTION.attrs)
 
     parser.add_option(icp_option)
 
