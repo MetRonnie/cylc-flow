@@ -519,8 +519,7 @@ def get_option_parser() -> COP:
         action='store',
     )
 
-    parser.add_option(
-        *AGAINST_SOURCE_OPTION.args, **AGAINST_SOURCE_OPTION.kwargs)
+    parser.add_option(AGAINST_SOURCE_OPTION.option)
 
     parser.add_cylc_rose_options()
 

@@ -103,7 +103,7 @@ _input = input  # to enable testing
 
 REINSTALL_CYLC_ROSE_OPTIONS = [
     OptionSettings(
-        ['--clear-rose-install-options'],
+        '--clear-rose-install-options',
         help="Clear options previously set by cylc-rose.",
         action='store_true',
         default=False,
@@ -114,7 +114,7 @@ REINSTALL_CYLC_ROSE_OPTIONS = [
 
 REINSTALL_OPTIONS = [
     OptionSettings(
-        ["--yes"],
+        "--yes",
         help='Skip interactive prompts.',
         action="store_true",
         default=False,
@@ -143,8 +143,8 @@ def get_option_parser() -> COP:
         parser.add_cylc_rose_options()
         options = REINSTALL_CYLC_ROSE_OPTIONS + REINSTALL_OPTIONS
 
-    for option in options:
-        parser.add_option(*option.args, **option.kwargs)
+    for opt_settings in options:
+        parser.add_option(opt_settings.option)
 
     return parser
 

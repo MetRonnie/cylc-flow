@@ -117,7 +117,7 @@ from cylc.flow.terminal import cli_function
 
 INSTALL_OPTIONS = [
     OptionSettings(
-        ["--workflow-name", "-n"],
+        "--workflow-name", "-n",
         help="Install into ~/cylc-run/<WORKFLOW_NAME>/runN ",
         action="store",
         metavar="WORKFLOW_NAME",
@@ -126,7 +126,7 @@ INSTALL_OPTIONS = [
         sources={'install'},
     ),
     OptionSettings(
-        ["--symlink-dirs"],
+        "--symlink-dirs",
         help=(
             "Enter a comma-delimited list, in the form"
             " 'log=path/to/store, share = $HOME/some/path, ...'."
@@ -139,7 +139,7 @@ INSTALL_OPTIONS = [
         sources={'install'},
     ),
     OptionSettings(
-        ["--run-name", "-r"],
+        "--run-name", "-r",
         help=(
             "Give the run a custom name instead of automatically"
             " numbering it."),
@@ -150,7 +150,7 @@ INSTALL_OPTIONS = [
         sources={'install'},
     ),
     OptionSettings(
-        ["--no-run-name"],
+        "--no-run-name",
         help=(
             "Install the workflow directly into"
             " ~/cylc-run/<workflow_name>,"
@@ -161,7 +161,7 @@ INSTALL_OPTIONS = [
         sources={'install'},
     ),
     OptionSettings(
-        ['--no-ping'],
+        '--no-ping',
         help=(
             "When scanning for active instances of the workflow, "
             "do not attempt to contact the schedulers to get status."),
@@ -187,8 +187,8 @@ def get_option_parser() -> COP:
 
     options = parser.get_cylc_rose_options() + INSTALL_OPTIONS
 
-    for option in options:
-        parser.add_option(*option.args, **option.kwargs)
+    for opt_settings in options:
+        parser.add_option(opt_settings.option)
 
     return parser
 

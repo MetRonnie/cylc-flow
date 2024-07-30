@@ -103,8 +103,7 @@ def get_option_parser():
              "not correspond to those reported by the parser).",
              action="store_true", default=False, dest="cat")
 
-    parser.add_option(
-        *AGAINST_SOURCE_OPTION.args, **AGAINST_SOURCE_OPTION.kwargs)
+    parser.add_option(AGAINST_SOURCE_OPTION.options)
 
     parser.add_cylc_rose_options()
 

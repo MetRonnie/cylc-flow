@@ -71,7 +71,7 @@ VALIDATE_AGAINST_SOURCE_OPTION.sources = {'validate'}
 
 VALIDATE_OPTIONS = [
     OptionSettings(
-        ["--check-circular"],
+        "--check-circular",
         help=(
             "Check for circular dependencies in graphs when the number of"
             " tasks is greater than 100 (smaller graphs are always"
@@ -83,7 +83,7 @@ VALIDATE_OPTIONS = [
         sources={'validate'}
     ),
     OptionSettings(
-        ["--output", "-o"],
+        "--output", "-o",
         help="Specify a file name to dump the processed flow.cylc.",
         metavar="FILENAME",
         action="store",
@@ -91,7 +91,7 @@ VALIDATE_OPTIONS = [
         sources={'validate'}
     ),
     OptionSettings(
-        ["--profile"],
+        "--profile",
         help="Output profiling (performance) information",
         action="store_true",
         default=False,
@@ -110,12 +110,12 @@ def get_option_parser():
         argdoc=[WORKFLOW_ID_OR_PATH_ARG_DOC],
     )
 
-    for option in [
+    for opt_settings in [
         *parser.get_cylc_rose_options(),
         *VALIDATE_OPTIONS,
         VALIDATE_AGAINST_SOURCE_OPTION,
     ]:
-        parser.add_option(*option.args, **option.kwargs)
+        parser.add_option(opt_settings.option)
 
     parser.set_defaults(is_validate=True)
 

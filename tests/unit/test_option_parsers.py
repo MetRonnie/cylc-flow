@@ -14,27 +14,44 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from contextlib import redirect_stdout
 import io
+import shlex
 import sys
+from contextlib import redirect_stdout
 from types import SimpleNamespace
-from typing import List
+from typing import Iterable, List
 
 import pytest
 from pytest import param
 
 import cylc.flow.flags
 from cylc.flow.option_parsers import (
-    CylcOptionParser as COP, Options, combine_options, combine_options_pair,
-    OptionSettings, cleanup_sysargv, filter_sysargv
+    CylcOptionParser as COP,
+    Options,
+    OptionSettings,
+    cleanup_sysargv,
+    combine_options,
+    combine_options_pair,
+    filter_sysargv,
 )
+from cylc.flow.scripts.install import INSTALL_OPTIONS
 
 
 USAGE_WITH_COMMENT = "usage \n # comment"
-ARGS = 'args'
-KWARGS = 'kwargs'
+OPTS = 'opts'
+ATTRS = 'attrs'
 SOURCES = 'sources'
 USEIF = 'useif'
+
+
+def get_option_by_name(
+    opts: Iterable[OptionSettings], name: str
+) -> OptionSettings:
+    """Get an OptionSettings object by name from a list of CylcOptions."""
+    try:
+        return next((x for x in opts if x.option.dest == name))
+    except StopIteration:
+        raise ValueError(name)
 
 
 @pytest.fixture(scope='module')
@@ -110,132 +127,79 @@ def test_Options_std_opts():
     'first, second, expect',
     [
         param(
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'do'}}],
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'dont'}}],
-            (
-                [{
-                    ARGS: ['-f', '--foo'], KWARGS: {},
-                    SOURCES: {'do', 'dont'}, USEIF: ''
-                }]
-            ),
-            id='identical arg lists unchanged'
+            [OptionSettings('-f', '--foo', sources={'do'})],
+            [OptionSettings('-f', '--foo', sources={'dont'})],
+            [OptionSettings('-f', '--foo', sources={'do', 'dont'})],
+            id='identical arg lists unchanged',
         ),
         param(
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'fall'}}],
-            [{
-                ARGS: ['-f', '--foolish'],
-                KWARGS: {'help': 'not identical'},
-                SOURCES: {'fold'}}],
-            (
-                [
-                    {
-                        ARGS: ['--foo'], KWARGS: {}, SOURCES: {'fall'},
-                        USEIF: ''
-                    },
-                    {
-                        ARGS: ['--foolish'],
-                        KWARGS: {'help': 'not identical'},
-                        SOURCES: {'fold'},
-                        USEIF: ''
-                    }
-                ]
-            ),
-            id='different arg lists lose shared names'
+            [OptionSettings('-f', '--foo', sources={'fall'})],
+            [
+                OptionSettings(
+                    '-f', '--foolish', sources={'fold'}, help='not identical'
+                )
+            ],
+            [
+                OptionSettings('--foo', sources={'fall'}),
+                OptionSettings(
+                    '--foolish', sources={'fold'}, help='not identical'
+                ),
+            ],
+            id='different arg lists lose shared names',
         ),
         param(
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'cook'}}],
-            [{
-                ARGS: ['-f', '--foo'],
-                KWARGS: {'help': 'not identical', 'dest': 'foobius'},
-                SOURCES: {'bake'},
-                USEIF: ''
-            }],
+            [OptionSettings('-f', '--foo', sources={'cook'})],
+            [
+                OptionSettings(
+                    '-f', '--foo',
+                    sources={'bake'}, help='not identical', dest='foobius',
+                )
+            ],
             None,
-            id='different args identical arg list cause exception'
+            id='different args identical arg list cause exception',
         ),
         param(
-            [{ARGS: ['-g', '--goo'], KWARGS: {}, SOURCES: {'knit'}}],
-            [{ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'feed'}}],
+            [OptionSettings('-g', '--goo', sources={'knit'})],
+            [OptionSettings('-f', '--foo', sources={'feed'})],
             [
-                {
-                    ARGS: ['-g', '--goo'], KWARGS: {},
-                    SOURCES: {'knit'}, USEIF: ''
-                },
-                {
-                    ARGS: ['-f', '--foo'], KWARGS: {},
-                    SOURCES: {'feed'}, USEIF: ''
-                },
+                OptionSettings('-g', '--goo', sources={'knit'}),
+                OptionSettings('-f', '--foo', sources={'feed'}),
             ],
-            id='all unrelated args added'
+            id='all unrelated args added',
         ),
         param(
             [
-                {ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'work'}},
-                {ARGS: ['-r', '--redesdale'], KWARGS: {}, SOURCES: {'work'}}
+                OptionSettings('-f', '--foo', sources={'work'}),
+                OptionSettings('-r', '--redesdale', sources={'work'}),
             ],
             [
-                {ARGS: ['-f', '--foo'], KWARGS: {}, SOURCES: {'sink'}},
-                {
-                    ARGS: ['-b', '--buttered-peas'],
-                    KWARGS: {}, SOURCES: {'sink'}
-                }
+                OptionSettings('-f', '--foo', sources={'sink'}),
+                OptionSettings('-b', '--buttered-peas', sources={'sink'}),
             ],
             [
-                {
-                    ARGS: ['-f', '--foo'],
-                    KWARGS: {},
-                    SOURCES: {'work', 'sink'},
-                    USEIF: ''
-                },
-                {
-                    ARGS: ['-b', '--buttered-peas'],
-                    KWARGS: {},
-                    SOURCES: {'sink'},
-                    USEIF: ''
-                },
-                {
-                    ARGS: ['-r', '--redesdale'],
-                    KWARGS: {},
-                    SOURCES: {'work'},
-                    USEIF: ''
-                },
+                OptionSettings('-f', '--foo', sources={'work', 'sink'}),
+                OptionSettings('-b', '--buttered-peas', sources={'sink'}),
+                OptionSettings('-r', '--redesdale', sources={'work'}),
             ],
-            id='do not repeat args'
+            id='do not repeat args',
         ),
         param(
-            [
-                {
-                    ARGS: ['-f', '--foo'],
-                    KWARGS: {},
-                    SOURCES: {'push'}
-                },
-            ],
+            [OptionSettings('-f', '--foo', sources={'push'})],
             [],
-            [
-                {
-                    ARGS: ['-f', '--foo'],
-                    KWARGS: {},
-                    SOURCES: {'push'},
-                    USEIF: ''
-                },
-            ],
-            id='one empty list is fine'
-        )
-    ]
+            [OptionSettings('-f', '--foo', sources={'push'})],
+            id='one empty list is fine',
+        ),
+    ],
 )
 def test_combine_options_pair(first, second, expect):
     """It combines sets of options"""
-    first = [
-        OptionSettings(i[ARGS], sources=i[SOURCES], **i[KWARGS])
-        for i in first
-    ]
-    second = [
-        OptionSettings(i[ARGS], sources=i[SOURCES], **i[KWARGS])
-        for i in second
-    ]
     if expect is not None:
         result = combine_options_pair(first, second)
-        assert [i.__dict__ for i in result] == expect
+        assert [
+            (o.opts, o.sources, o.useif, o.attrs) for o in result
+        ] == [
+            (o.opts, o.sources, o.useif, o.attrs) for o in expect
+        ]
     else:
         with pytest.raises(Exception, match='Clashing Options'):
             combine_options_pair(first, second)
@@ -247,19 +211,19 @@ def test_combine_options_pair(first, second, expect):
         param(
             [
                 ([OptionSettings(
-                    ['-i', '--inflammable'], help='', sources={'wish'}
+                    '-i', '--inflammable', help='', sources={'wish'}
                 )]),
                 ([OptionSettings(
-                    ['-f', '--flammable'], help='', sources={'rest'}
+                    '-f', '--flammable', help='', sources={'rest'}
                 )]),
                 ([OptionSettings(
-                    ['-n', '--non-flammable'], help='', sources={'swim'}
+                    '-n', '--non-flammable', help='', sources={'swim'}
                 )]),
             ],
             [
-                {ARGS: ['-i', '--inflammable']},
-                {ARGS: ['-f', '--flammable']},
-                {ARGS: ['-n', '--non-flammable']}
+                {OPTS: {'-i', '--inflammable'}},
+                {OPTS: {'-f', '--flammable'}},
+                {OPTS: {'-n', '--non-flammable'}}
             ],
             id='merge three argsets no overlap'
         ),
@@ -267,27 +231,27 @@ def test_combine_options_pair(first, second, expect):
             [
                 [
                     OptionSettings(
-                        ['-m', '--morpeth'], help='', sources={'stop'}),
+                        '-m', '--morpeth', help='', sources={'stop'}),
                     OptionSettings(
-                        ['-r', '--redesdale'], help='', sources={'stop'}),
+                        '-r', '--redesdale', help='', sources={'stop'}),
                 ],
                 [
                     OptionSettings(
-                        ['-b', '--byker'], help='', sources={'walk'}),
+                        '-b', '--byker', help='', sources={'walk'}),
                     OptionSettings(
-                        ['-r', '--roxborough'], help='', sources={'walk'}),
+                        '-r', '--roxborough', help='', sources={'walk'}),
                 ],
                 [
                     OptionSettings(
-                        ['-b', '--bellingham'], help='', sources={'leap'}),
+                        '-b', '--bellingham', help='', sources={'leap'}),
                 ]
             ],
             [
-                {ARGS: ['--bellingham']},
-                {ARGS: ['--roxborough']},
-                {ARGS: ['--redesdale']},
-                {ARGS: ['--byker']},
-                {ARGS: ['-m', '--morpeth']}
+                {OPTS: {'--bellingham'}},
+                {OPTS: {'--roxborough'}},
+                {OPTS: {'--redesdale'}},
+                {OPTS: {'--byker'}},
+                {OPTS: {'-m', '--morpeth'}}
             ],
             id='merge three overlapping argsets'
         ),
@@ -297,12 +261,12 @@ def test_combine_options_pair(first, second, expect):
                 (
                     [
                         OptionSettings(
-                            ['-c', '--campden'], help='x', sources={'foo'})
+                            '-c', '--campden', help='x', sources={'foo'})
                     ]
                 )
             ],
             [
-                {ARGS: ['-c', '--campden']}
+                {OPTS: {'-c', '--campden'}}
             ],
             id="empty list doesn't clear result"
         ),
@@ -311,11 +275,11 @@ def test_combine_options_pair(first, second, expect):
 def test_combine_options(inputs, expect):
     """It combines multiple input sets"""
     result = combine_options(*inputs)
-    result_args = [i.args for i in result]
+    result_args = [i.opts for i in result]
 
     # Order of args irrelevent to test
     for option in expect:
-        assert option[ARGS] in result_args
+        assert option[OPTS] in result_args
 
 
 @pytest.mark.parametrize(
@@ -327,12 +291,12 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--foo', '-f']),
-                    OptionSettings(['--bar', '-b'], action='store'),
-                    OptionSettings(['--baz'], action='store_true'),
+                    OptionSettings('--foo', '-f'),
+                    OptionSettings('--bar', '-b', action='store'),
+                    OptionSettings('--baz', action='store_true'),
                 ],
                 'script_opts': [
-                    OptionSettings(['--foo', '-f']),
+                    OptionSettings('--foo', '-f'),
                 ]
             },
             'play myworkflow -f something',
@@ -344,9 +308,9 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--foo', '-f']),
-                    OptionSettings(['--bar', '-b']),
-                    OptionSettings(['--baz']),
+                    OptionSettings('--foo', '-f'),
+                    OptionSettings('--bar', '-b'),
+                    OptionSettings('--baz'),
                 ],
                 'script_opts': []
             },
@@ -359,9 +323,9 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--foo', '-f'])],
+                    OptionSettings('--foo', '-f')],
                 'script_opts': [
-                    OptionSettings(['--foo', '-f']),
+                    OptionSettings('--foo', '-f'),
                 ],
                 'source': './myworkflow',
             },
@@ -374,9 +338,9 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--foo', '-f'])],
+                    OptionSettings('--foo', '-f')],
                 'script_opts': [
-                    OptionSettings(['--foo', '-f']),
+                    OptionSettings('--foo', '-f'),
                 ],
                 'source': './myworkflow',
             },
@@ -389,11 +353,11 @@ def test_combine_options(inputs, expect):
                 'script_name': 'play',
                 'workflow_id': 'myworkflow',
                 'compound_script_opts': [
-                    OptionSettings(['--workflow-name', '-n']),
-                    OptionSettings(['--no-run-name']),
+                    OptionSettings('--workflow-name', '-n'),
+                    OptionSettings('--no-run-name'),
                 ],
                 'script_opts': [
-                    OptionSettings(['--not-used']),
+                    OptionSettings('--not-used'),
                 ]
             },
             'play myworkflow',
@@ -410,110 +374,155 @@ def test_cleanup_sysargv(
     """It replaces the contents of sysargv with Cylc Play argv items.
     """
     # Fake up sys.argv: for this test.
-    dummy_cylc_path = ['/pathto/my/cylc/bin/cylc']
-    monkeypatch.setattr(sys, 'argv', dummy_cylc_path + argv_before.split())
+    dummy_cylc_path = '/pathto/my/cylc/bin/cylc'
+    monkeypatch.setattr(
+        sys, 'argv', [dummy_cylc_path, *shlex.split(argv_before)]
+    )
     # Fake options too:
     opts = SimpleNamespace(**{
-        i.args[0].replace('--', ''): i for i in kwargs['compound_script_opts']
+        i.option.dest: None for i in kwargs['compound_script_opts']
     })
 
-    kwargs.update({'options': opts})
     if not kwargs.get('source', None):
         kwargs.update({'source': ''})
 
     # Test the script:
-    cleanup_sysargv(**kwargs)
-    assert sys.argv == dummy_cylc_path + expect.split()
+    cleanup_sysargv(**kwargs, options=opts)
+    assert sys.argv == [dummy_cylc_path, *shlex.split(expect)]
 
 
 @pytest.mark.parametrize(
-    'sysargs, simple, compound, expect', (
+    'sysargs, opts, expect', (
         param(
             # Test for https://github.com/cylc/cylc-flow/issues/5905
-            '--no-run-name --workflow-name=name'.split(),
-            ['--no-run-name'],
-            ['--workflow-name'],
+            '--no-run-name --workflow-name=name',
+            [
+                get_option_by_name(INSTALL_OPTIONS, 'no_run_name'),
+                get_option_by_name(INSTALL_OPTIONS, 'workflow_name'),
+            ],
             [],
             id='--workflow-name=name'
         ),
         param(
-            '--foo something'.split(),
-            [], [], '--foo something'.split(),
+            '--foo something',
+            [],
+            ['--foo', 'something'],
             id='no-opts-removed'
         ),
         param(
-            [], ['--foo'], ['--bar'], [],
+            '',
+            [
+                OptionSettings('--foo', action='store'),
+            ],
+            [],
             id='Null-check'
         ),
         param(
             '''--keep1 --keep2 42 --keep3=Hi
-            --throw1 --throw2 84 --throw3=There
-            '''.split(),
-            ['--throw1'],
-            '--throw2 --throw3'.split(),
-            '--keep1 --keep2 42 --keep3=Hi'.split(),
+            --throw1 --throw2 84 --throw3=There''',
+            [
+                OptionSettings('--throw1', action='store_true'),
+                OptionSettings('--throw2', action='store'),
+                OptionSettings('--throw3', action='store'),
+            ],
+            ['--keep1', '--keep2', '42', '--keep3=Hi'],
             id='complex'
         ),
         param(
-            "--foo 'foo=42' --bar='foo=94'".split(),
-            [], ['--foo'],
-            ['--bar=\'foo=94\''],
-            id='--bar=\'foo=94\''
+            "--foo '--foo=42' --bar='--foo=94' --baz '--foo 26'",
+            [
+                OptionSettings('--foo', action='append'),
+            ],
+            ["--bar=--foo=94", "--baz", "--foo 26"],
+            id="fiendish"
+        ),
+        param(
+            "--foo 1 --fool 2",
+            [
+                OptionSettings('--foo', action='store'),
+            ],
+            ["--fool", "2"],
+            id="substring"
+        ),
+        param(
+            "-v -v -x",
+            [
+                OptionSettings('-v', action='count', dest='verbosity'),
+            ],
+            ['-x'],
+            id="remove-multiple"
+        ),
+        param(
+            "-f --bar",
+            [
+                OptionSettings('--foo', '-f', action='count', dest='bar'),
+            ],
+            ['--bar'],
+            id="short-n-long"
+        ),
+        param(
+            "cylc frobnicate --quiet jbloggs --dir run1 jdoe",
+            [
+                OptionSettings(
+                    '--quiet', action='decrement', dest='verbosity'
+                ),
+                OptionSettings('--dir', action='store'),
+            ],
+            ['cylc', 'frobnicate', 'jbloggs', 'jdoe'],
+            id="non-typed-opt"
         )
     )
 )
 def test_filter_sysargv(
-    sysargs, simple, compound, expect
+    sysargs: str, opts: List[OptionSettings], expect: List[str]
 ):
-    """It returns the subset of sys.argv that we ask for.
-
-    n.b. The three most basic cases for this function are stored in
-    its own docstring.
-    """
-    assert filter_sysargv(sysargs, simple, compound) == expect
+    """It returns the subset of sys.argv that we ask for."""
+    assert filter_sysargv(shlex.split(sysargs), *opts) == expect
 
 
-class TestOptionSettings():
+class TestCylcOption():
     @staticmethod
     def test_init():
-        args = ['--foo', '-f']
-        kwargs = {'bar': 42}
+        opts = ['--foo', '-f']
+        attrs = {'metavar': 'FOO'}
         sources = {'touch'}
         useif = 'hello'
 
-        result = OptionSettings(
-            args, sources=sources, useif=useif, **kwargs)
+        result = OptionSettings(*opts, sources=sources, useif=useif, **attrs)
 
-        assert result.__dict__ == {
-            'kwargs': kwargs, 'sources': sources,
-            'useif': useif, 'args': args
-        }
+        assert result.opts == set(opts)
+        assert result.attrs == attrs
+        assert result.sources == sources
+        assert result.useif == useif
+        assert result.opt_string == '--foo'
 
     @staticmethod
     @pytest.mark.parametrize(
         'first, second, expect',
         (
             param(
-                (['--foo', '-f'], {'bar': 42}, {'touch'}, 'hello'),
-                (['--foo', '-f'], {'bar': 42}, {'touch'}, 'hello'),
-                True, id='Totally the same'),
+                OptionSettings('--foo', '-f', sources={'a'}, useif='hello'),
+                OptionSettings('--foo', '-f', sources={'a'}, useif='hello'),
+                True,
+                id='Totally the same'
+            ),
             param(
-                (['--foo', '-f'], {'bar': 42}, {'touch'}, 'hello'),
-                (['--foo', '-f'], {'bar': 42}, {'wibble'}, 'byee'),
-                True, id='Differing extras'),
+                OptionSettings('--foo', '-f', sources={'a'}, useif='hello'),
+                OptionSettings('--foo', '-f', sources={'b'}, useif='byee'),
+                True,
+                id='Differing extras'
+            ),
             param(
-                (['-f'], {'bar': 42}, {'touch'}, 'hello'),
-                (['--foo', '-f'], {'bar': 42}, {'wibble'}, 'byee'),
-                False, id='Not equal args'),
+                OptionSettings('-f', sources={'a'}, useif='hello'),
+                OptionSettings('--foo', '-f', sources={'b'}, useif='byee'),
+                False,
+                id='Not equal opts'
+            ),
         )
     )
-    def test___eq__args_intersection(first, second, expect):
-        args, kwargs, sources, useif = first
-        first = OptionSettings(
-            args, sources=sources, useif=useif, **kwargs)
-        args, kwargs, sources, useif = second
-        second = OptionSettings(
-            args, sources=sources, useif=useif, **kwargs)
+    def test___eq__(
+        first: OptionSettings, second: OptionSettings, expect: bool
+    ):
         assert (first == second) == expect
 
     @staticmethod
@@ -523,24 +532,24 @@ class TestOptionSettings():
             param(
                 ['--foo', '-f'],
                 ['--foo', '-f'],
-                ['--foo', '-f'],
+                {'--foo', '-f'},
                 id='Totally the same'),
             param(
                 ['--foo', '-f'],
                 ['--foolish', '-f'],
-                ['-f'],
+                {'-f'},
                 id='Some overlap'),
             param(
                 ['--foo', '-f'],
                 ['--bar', '-b'],
-                [],
+                set(),
                 id='No overlap'),
         )
     )
     def test___and__(first, second, expect):
-        first = OptionSettings(first)
-        second = OptionSettings(second)
-        assert sorted(first & second) == sorted(expect)
+        first = OptionSettings(*first)
+        second = OptionSettings(*second)
+        assert first & second == expect
 
     @staticmethod
     @pytest.mark.parametrize(
@@ -549,34 +558,34 @@ class TestOptionSettings():
             param(
                 ['--foo', '-f'],
                 ['--foo', '-f'],
-                [],
+                set(),
                 id='Totally the same'),
             param(
                 ['--foo', '-f'],
                 ['--foolish', '-f'],
-                ['--foo'],
+                {'--foo'},
                 id='Some overlap'),
             param(
                 ['--foolish', '-f'],
                 ['--foo', '-f'],
-                ['--foolish'],
+                {'--foolish'},
                 id='Some overlap not commuting'),
             param(
                 ['--foo', '-f'],
                 ['--bar', '-b'],
-                ['--foo', '-f'],
+                {'--foo', '-f'},
                 id='No overlap'),
         )
     )
-    def test___sub__args_subtraction(first, second, expect):
-        first = OptionSettings(first)
-        second = OptionSettings(second)
-        assert sorted(first - second) == sorted(expect)
+    def test___sub__(first, second, expect):
+        first = OptionSettings(*first)
+        second = OptionSettings(*second)
+        assert first - second == expect
 
     @staticmethod
     def test__in_list():
         """It is in a list."""
-        first = OptionSettings(['--foo'])
-        second = OptionSettings(['--foo'])
-        third = OptionSettings(['--bar'])
+        first = OptionSettings('--foo')
+        second = OptionSettings('--foo')
+        third = OptionSettings('--bar')
         assert first._in_list([second, third]) is True

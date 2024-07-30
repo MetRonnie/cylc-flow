@@ -15,37 +15,41 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """Common options for all cylc commands."""
 
-from contextlib import suppress
 import logging
-from itertools import product
-from optparse import (
-    OptionParser,
-    Values,
-    Option,
-    IndentedHelpFormatter,
-)
 import os
 import re
 import sys
+from contextlib import suppress
+from itertools import product
+from optparse import (
+    IndentedHelpFormatter,
+    Option,
+    OptionParser,
+    Values,
+)
 from textwrap import dedent
-from typing import Any, Dict, Iterable, Optional, List, Set, Tuple
-
-from ansimarkup import (
-    parse as cparse,
-    strip as cstrip
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    FrozenSet,
+    Tuple,
 )
 
-from cylc.flow import LOG
-from cylc.flow.terminal import should_use_color, DIM
+from ansimarkup import parse as cparse, strip as cstrip
+
 import cylc.flow.flags
+from cylc.flow import LOG
+from cylc.flow.log_level import env_to_verbosity, verbosity_to_log_level
 from cylc.flow.loggingutil import (
     CylcLogFormatter,
     setup_segregated_log_streams,
 )
-from cylc.flow.log_level import (
-    env_to_verbosity,
-    verbosity_to_log_level
-)
+from cylc.flow.terminal import DIM, should_use_color
+
 
 WORKFLOW_ID_ARG_DOC = ('WORKFLOW', 'Workflow ID')
 OPT_WORKFLOW_ID_ARG_DOC = ('[WORKFLOW]', 'Workflow ID')
@@ -56,72 +60,90 @@ ID_MULTI_ARG_DOC = ('ID ...', 'Workflow/Cycle/Family/Task ID(s)')
 FULL_ID_MULTI_ARG_DOC = ('ID ...', 'Cycle/Family/Task ID(s)')
 
 SHORTLINK_TO_ICP_DOCS = "https://bit.ly/3MYHqVh"
-DOUBLEDASH = '--'
+
+
+class CylcOption(Option):
+    """Optparse option which adds a decrement action (opposite of 'count')."""
+
+    ACTIONS = Option.ACTIONS + ('decrement',)
+    STORE_ACTIONS = Option.STORE_ACTIONS + ('decrement',)
+
+    def take_action(self, action, dest, opt, value, values, parser):
+        if action == 'decrement':
+            setattr(values, dest, values.ensure_value(dest, 0) - 1)
+        else:
+            Option.take_action(self, action, dest, opt, value, values, parser)
 
 
 class OptionSettings():
-    """Container for info about a command line option
+    """Container for info about a command line option.
 
-    Despite some similarities this is not to be confused with
-    optparse.Option: This a container for information which may or may
-    not be passed to optparse depending on the results of
-    cylc.flow.option_parsers(thismodule).combine_options_pair.
+    Args:
+        opts: the option and any alternative forms/aliases.
+        sources: set of CLI scripts which use this option.
+        useif: badge for use by Cylc optionparser.
+        **attrs: kwargs for optparse.Option.
     """
 
     def __init__(
         self,
-        argslist: List[str],
+        *opts: str,
         sources: Optional[Set[str]] = None,
         useif: str = '',
-        **kwargs
+        **attrs
     ):
-        """Init function:
-
-        Args:
-            arglist: list of arguments for optparse.Option.
-            sources: set of CLI scripts which use this option.
-            useif: badge for use by Cylc optionparser.
-            **kwargs: kwargs for optparse.option.
-        """
-        self.args: List[str] = argslist
-        self.kwargs: Dict[str, Any] = kwargs
-        self.sources: Set[str] = sources if sources is not None else set()
+        self.opts: FrozenSet[str] = frozenset(opts)
+        self.attrs: Dict[str, Any] = attrs
+        self.sources: Set[str] = sources or set()
         self.useif: str = useif
+        self.option = CylcOption(*opts, **attrs)
 
-    def __eq__(self, other):
-        """Args and Kwargs, but not other props equal.
+    def __eq__(self, other) -> bool:
+        """Opts and attrs equal (ignoring the help attr and other properties).
 
-        (Also make an exception for kwargs['help'] to allow lists of sources
-        prepended to 'help' to be passed through.)
+        We make an exception for 'help' to allow lists of sources
+        prepended to 'help' to be passed through.
         """
+        if not isinstance(other, OptionSettings):
+            return NotImplemented
         return (
             (
-                {k: v for k, v in self.kwargs.items() if k != 'help'}
-                == {k: v for k, v in other.kwargs.items() if k != 'help'}
+                {k: v for k, v in self.attrs.items() if k != 'help'}
+                == {k: v for k, v in other.attrs.items() if k != 'help'}
             )
-            and self.args == other.args
+            and self.opts == other.opts
         )
 
-    def __and__(self, other):
-        """Is there a set intersection between arguments."""
-        return list(set(self.args).intersection(set(other.args)))
+    def __and__(self, other) -> FrozenSet[str]:
+        """Return set intersection between options."""
+        if not isinstance(other, OptionSettings):
+            return NotImplemented
+        return self.opts & other.opts
 
-    def __sub__(self, other):
-        """Set difference on args."""
-        return list(set(self.args) - set(other.args))
+    def __sub__(self, other) -> FrozenSet[str]:
+        """Return set difference between options."""
+        if not isinstance(other, OptionSettings):
+            return NotImplemented
+        return self.opts - other.opts
 
-    def _in_list(self, others):
+    def _in_list(self, others: Iterable['OptionSettings']) -> bool:
         """CLI arguments for this option found in any of a list of
         other options."""
         return any(self & other for other in others)
 
-    def _update_sources(self, other):
-        """Update the sources from this and 1 other OptionSettings object"""
-        self.sources = {*self.sources, *other.sources}
+    @property
+    def opt_string(self) -> str:
+        """The canonical option string.
+
+        Examples:
+            >>> OptionSettings('-f', '--file').opt_string
+            '--file'
+        """
+        return self.option.get_opt_string()
 
 
 ICP_OPTION = OptionSettings(
-    ["--initial-cycle-point", "--icp"],
+    "--initial-cycle-point", "--icp",
     help=(
         "Set the initial cycle point."
         " Required if not defined in flow.cylc."
@@ -134,7 +156,7 @@ ICP_OPTION = OptionSettings(
 )
 
 AGAINST_SOURCE_OPTION = OptionSettings(
-    ['--against-source'],
+    '--against-source',
     help=(
         "Load the workflow configuration from the source directory it was"
         " installed from using any options (e.g. template variables) which"
@@ -150,8 +172,7 @@ AGAINST_SOURCE_OPTION = OptionSettings(
 )
 
 
-icp_option = Option(
-    *ICP_OPTION.args, **ICP_OPTION.kwargs)  # type: ignore[arg-type]
+icp_option = ICP_OPTION.option
 
 
 def format_shell_examples(string):
@@ -184,19 +205,6 @@ def format_help_headings(string):
             flags=re.M,
         )
     )
-
-
-class CylcOption(Option):
-    """Optparse option which adds a decrement action."""
-
-    ACTIONS = Option.ACTIONS + ('decrement',)
-    STORE_ACTIONS = Option.STORE_ACTIONS + ('decrement',)
-
-    def take_action(self, action, dest, opt, value, values, parser):
-        if action == 'decrement':
-            setattr(values, dest, values.ensure_value(dest, 0) - 1)
-        else:
-            Option.take_action(self, action, dest, opt, value, values, parser)
 
 
 class CylcHelpFormatter(IndentedHelpFormatter):
@@ -281,35 +289,35 @@ class CylcOptionParser(OptionParser):
 
     STD_OPTIONS = [
         OptionSettings(
-            ['-q', '--quiet'], help='Decrease verbosity.',
+            '-q', '--quiet', help='Decrease verbosity.',
             action='decrement', dest='verbosity', useif='all'),
         OptionSettings(
-            ['-v', '--verbose'], help='Increase Verbosity',
+            '-v', '--verbose', help='Increase Verbosity',
             dest='verbosity', action='count',
             default=env_to_verbosity(os.environ), useif='all'),
         OptionSettings(
-            ['--debug'], help='Equivalent to -v -v',
+            '--debug', help='Equivalent to -v -v',
             dest='verbosity', action='store_const', const=2, useif='all'),
         OptionSettings(
-            ['--timestamp'],
+            '--timestamp',
             help='Add a timestamp to messages logged to the terminal.',
             action='store_true', dest='log_timestamp',
             default=False, useif='all'),
         OptionSettings(
-            ['--no-timestamp'], help="Don't add a timestamp to messages logged"
+            '--no-timestamp', help="Don't add a timestamp to messages logged"
             " to the terminal (this does nothing - it is now the default.",
             action='store_false', dest='_noop',
             default=False, useif='all'),
         OptionSettings(
-            ['--color', '--colour'], metavar='WHEN', action='store',
-            default='auto', choices=['never', 'auto', 'always'],
+            '--color', '--colour', metavar='WHEN', action='store',
+            dest='color', default='auto', choices=['never', 'auto', 'always'],
             help=(
                 "When to use color/bold text in terminal output."
                 " Options are 'never', 'auto' and 'always'."
             ),
             useif='color'),
         OptionSettings(
-            ['--comms-timeout'], metavar='SEC',
+            '--comms-timeout', metavar='SEC',
             help=(
                 "Set a timeout for network connections"
                 " to the running workflow. The default is no timeout."
@@ -318,7 +326,7 @@ class CylcOptionParser(OptionParser):
             ),
             action='store', default=None, dest='comms_timeout', useif='comms'),
         OptionSettings(
-            ['-s', '--set'], metavar='NAME=VALUE',
+            '-s', '--set', metavar='NAME=VALUE',
             help=(
                 "Set the value of a Jinja2 template variable in the"
                 " workflow definition."
@@ -331,7 +339,7 @@ class CylcOptionParser(OptionParser):
             action='append', default=[], dest='templatevars', useif='jset'
         ),
         OptionSettings(
-            ['-z', '--set-list', '--template-list'],
+            '-z', '--set-list', '--template-list',
             metavar='NAME=VALUE1,VALUE2,...',
             # NOTE: deliberate non-breaking spaces in help text:
             help=(
@@ -349,7 +357,7 @@ class CylcOptionParser(OptionParser):
             useif='jset'
         ),
         OptionSettings(
-            ['--set-file'], metavar='FILE',
+            '--set-file', metavar='FILE',
             help=(
                 "Set the value of Jinja2 template variables in the"
                 " workflow definition from a file containing NAME=VALUE"
@@ -436,25 +444,21 @@ class CylcOptionParser(OptionParser):
             formatter=CylcHelpFormatter()
         )
 
-    def get_std_options(self):
+    def get_std_options(self) -> List[OptionSettings]:
         """Get a data-structure of standard options"""
-        opts = []
-        for opt in self.STD_OPTIONS:
-            if (
-                opt.useif == 'all'
-                or hasattr(self, opt.useif) and getattr(self, opt.useif)
-            ):
-                opts.append(opt)
-        return opts
+        return [
+            opt for opt in self.STD_OPTIONS
+            if opt.useif == 'all' or getattr(self, opt.useif, None)
+        ]
 
-    def add_std_options(self):
+    def add_std_options(self) -> None:
         """Add standard options if they have not been overridden."""
-        for option in self.get_std_options():
-            if not any(self.has_option(i) for i in option.args):
-                self.add_option(*option.args, **option.kwargs)
+        for opt_settings in self.get_std_options():
+            if not any(self.has_option(i) for i in opt_settings.opts):
+                self.add_option(opt_settings.option)
 
     @staticmethod
-    def get_cylc_rose_options():
+    def get_cylc_rose_options() -> List[OptionSettings]:
         """Returns a list of option dictionaries if Cylc Rose exists."""
         try:
             __import__('cylc.rose')
@@ -462,7 +466,7 @@ class CylcOptionParser(OptionParser):
             return []
         return [
             OptionSettings(
-                ["--opt-conf-key", "-O"],
+                "--opt-conf-key", "-O",
                 help=(
                     "Use optional Rose Config Setting"
                     " (If Cylc-Rose is installed)"),
@@ -470,7 +474,7 @@ class CylcOptionParser(OptionParser):
                 sources={'cylc-rose'},
             ),
             OptionSettings(
-                ["--define", '-D'],
+                "--define", '-D',
                 help=(
                     "Each of these overrides the `[SECTION]KEY` setting"
                     " in a `rose-suite.conf` file."
@@ -480,7 +484,7 @@ class CylcOptionParser(OptionParser):
                 action="append", default=[], dest="defines",
                 sources={'cylc-rose'}),
             OptionSettings(
-                ["--rose-template-variable", '-S', '--define-suite'],
+                "--rose-template-variable", '-S', '--define-suite',
                 help=(
                     "As `--define`, but with an implicit `[SECTION]` for"
                     " workflow variables."),
@@ -495,7 +499,7 @@ class CylcOptionParser(OptionParser):
         Now a vestigal interface for get_cylc_rose_options.
         """
         for option in self.get_cylc_rose_options():
-            self.add_option(*option.args, **option.kwargs)
+            self.add_option(*option.opts, **option.attrs)
 
     def parse_args(self, api_args, remove_opts=None):
         """Parse options and arguments, overrides OptionParser.parse_args.
@@ -634,20 +638,22 @@ def appendif(list_, item):
     return list_
 
 
-def combine_options_pair(first_list, second_list):
+def combine_options_pair(
+    first_list: List[OptionSettings], second_list: List[OptionSettings]
+) -> List[OptionSettings]:
     """Combine two option lists recording where each came from.
 
     Scenarios:
-        - Arguments are identical - return this argument.
-        - Arguments are not identical but have some common label strings,
-          i.e. both arguments can be invoked using `-f`.
+        - Options are identical - return this option.
+        - Options are not identical but have some common label strings,
+          e.g. both options can be invoked using `-f`.
           - If there are non-shared label strings strip the shared ones.
           - Otherwise raise an error.
           E.g: If `command-A` has an option `-f` or `--file` and
           `command-B has an option `-f` or `--fortran`` then
           `command-A+B` will have options `--fortran` and `--file` but _not_
           `-f`, which would be confusing.
-        - Arguments only apply to a single component of the compound CLI
+        - Options only apply to a single component of the compound CLI
           script.
 
     """
@@ -660,10 +666,10 @@ def combine_options_pair(first_list, second_list):
         for first, second in product(first_list, second_list):
             # Two options are identical in both args and kwargs:
             if first == second:
-                first._update_sources(second)
+                first.sources.update(second.sources)
                 output = appendif(output, first)
 
-            # If any of the argument names identical we must remove
+            # If any of the option names identical we must remove
             # overlapping names (if we can)
             # e.g. [-a, --aleph], [-a, --alpha-centuri] -> keep both options
             # but neither should have the `-a` short version:
@@ -673,13 +679,13 @@ def combine_options_pair(first_list, second_list):
             ):
                 # if any of the args are different:
 
-                if first.args == second.args:
+                if first.opts == second.opts:
                     raise Exception(
-                        f'Clashing Options \n{first.args}\n{second.args}')
+                        f'Clashing Options \n{first.opts}\n{second.opts}')
                 else:
-                    first_args = first - second
-                    second.args = second - first
-                    first.args = first_args
+                    first_opts = first - second
+                    second.opts = second - first
+                    first.opts = first_opts
                     output = appendif(output, first)
                     output = appendif(output, second)
             else:
@@ -693,20 +699,22 @@ def combine_options_pair(first_list, second_list):
     return output
 
 
-def add_sources_to_helps(options, modify=None):
+def add_sources_to_helps(
+    options: Iterable[OptionSettings], modify: Optional[dict] = None
+) -> None:
     """Prettify format of list of CLI commands this option applies to
     and prepend that list to the start of help.
 
     Arguments:
         Options:
-            Options dicts to modify help upon.
+            OptionSettings to modify help upon.
         modify:
             Dict of items to substitute: Intended to allow one
             to replace cylc-rose with the names of the sub-commands
             cylc rose options apply to.
     """
     modify = {} if modify is None else modify
-    cformat = cparse if should_use_color(options) else cstrip
+    cformat = cparse if should_use_color(options) else cstrip ## UGH
     for option in options:
         if hasattr(option, 'sources'):
             sources = list(option.sources)
@@ -715,25 +723,27 @@ def add_sources_to_helps(options, modify=None):
                     sources.append(sub)
                     sources.remove(match)
 
-            option.kwargs['help'] = cformat(
+            option.attrs['help'] = cformat(
                 f'<cyan>[{", ".join(sources)}]</cyan>'
-                f' {option.kwargs["help"]}'
+                f' {option.attrs["help"]}'
             )
-    return options
+            option.option = CylcOption(*option.opts, **option.attrs)
 
 
-def combine_options(*args, modify=None):
-    """Combine a list of argument dicts.
+def combine_options(
+    *args: List[OptionSettings], modify: Optional[dict] = None
+) -> List[OptionSettings]:
+    """Combine lists of Cylc options.
 
     Ordering should be irrelevant because combine_options_pair should
     be commutative, and the overall order of args is not relevant.
     """
-    list_ = list(args)
-    output = list_[0]
-    for arg in list_[1:]:
+    output = args[0]
+    for arg in args[1:]:
         output = combine_options_pair(arg, output)
 
-    return add_sources_to_helps(output, modify)
+    add_sources_to_helps(output, modify)
+    return output
 
 
 def cleanup_sysargv(
@@ -758,37 +768,20 @@ def cleanup_sysargv(
         workflow_id:
         options:
             Actual options provided to the compound script.
-        compound_script_options:
+        compound_script_opts:
             Options available in compound script.
-        script_options:
+        script_opts:
             Options available in target script.
         source:
             Source directory.
     """
-    # Organize Options by dest.
-    script_opts_by_dest = {
-        x.kwargs.get('dest', x.args[0].strip(DOUBLEDASH)): x
-        for x in script_opts
-    }
-    compound_opts_by_dest = {
-        x.kwargs.get('dest', x.args[0].strip(DOUBLEDASH)): x
-        for x in compound_script_opts
-    }
+    script_opts_names = {x.option.dest for x in script_opts}
+    unwanted_opts = [
+        x for x in compound_script_opts
+        if x.option.dest in set(options.__dict__) - script_opts_names
+    ]
 
-    # Get a list of unwanted args:
-    unwanted_compound: List[str] = []
-    unwanted_simple: List[str] = []
-    for unwanted_dest in set(options.__dict__) - set(script_opts_by_dest):
-        for unwanted_arg in compound_opts_by_dest[unwanted_dest].args:
-            if (
-                compound_opts_by_dest[unwanted_dest].kwargs.get('action', None)
-                in ['store_true', 'store_false']
-            ):
-                unwanted_simple.append(unwanted_arg)
-            else:
-                unwanted_compound.append(unwanted_arg)
-
-    new_args = filter_sysargv(sys.argv, unwanted_simple, unwanted_compound)
+    new_args = filter_sysargv(sys.argv, *unwanted_opts)
 
     # replace compound script name:
     new_args[1] = script_name
@@ -803,37 +796,32 @@ def cleanup_sysargv(
 
 
 def filter_sysargv(
-    sysargs, unwanted_simple: List, unwanted_compound: List
-) -> List:
+    argv: List[str],
+    *opts_to_remove: OptionSettings,
+) -> List[str]:
     """Create a copy of sys.argv without unwanted arguments:
-
-    Cases:
-        >>> this = filter_sysargv
-        >>> this(['--foo', 'expects-a-value', '--bar'], [], ['--foo'])
-        ['--bar']
-        >>> this(['--foo=expects-a-value', '--bar'], [], ['--foo'])
-        ['--bar']
-        >>> this(['--foo', '--bar'], ['--foo'], [])
-        ['--bar']
     """
     pop_next: bool = False
-    new_args: List = []
-    for this_arg in sysargs:
-        parts = this_arg.split('=', 1)
+    new_args: List[str] = []
+    for whole_arg in argv:
         if pop_next:
+            # We've already removed an option and need to skip the value too
             pop_next = False
             continue
-        elif parts[0] in unwanted_compound:
-            # Case --foo=value or --foo value
-            if len(parts) == 1:
-                # --foo value
-                pop_next = True
-            continue
-        elif parts[0] in unwanted_simple:
-            # Case --foo does not expect a value:
-            continue
-        else:
-            new_args.append(this_arg)
+        arg, *eq_val = whole_arg.split('=', 1)
+        for opt_setgs in opts_to_remove:
+            if arg in opt_setgs.opts:
+                # We've found an unwanted option
+                if (
+                    opt_setgs.option.action in CylcOption.ALWAYS_TYPED_ACTIONS
+                    # Could be --foo=value or --foo value...
+                    and not eq_val
+                    # ...ok, must be --foo value
+                ):
+                    pop_next = True
+                break
+        else:  # no break
+            new_args.append(whole_arg)
     return new_args
 
 

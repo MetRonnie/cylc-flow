@@ -128,10 +128,34 @@ PLAY_ICP_OPTION = deepcopy(ICP_OPTION)
 PLAY_ICP_OPTION.sources = {'play'}
 
 RUN_MODE = OptionSettings(
-    ["-m", "--mode"],
+    "-m", "--mode",
     help="Run mode: live, dummy, simulation (default live).",
     metavar="STRING", action='store', dest="run_mode",
     choices=[RunMode.LIVE, RunMode.DUMMY, RunMode.SIMULATION],
+)
+DOWNGRADE_OPTION = OptionSettings(
+    '--downgrade',
+    help=(
+        'Allow the workflow to be restarted with an'
+        ' older version of Cylc, NOT RECOMMENDED.'
+        ' By default Cylc prevents you from restarting'
+        ' a workflow with an older version of Cylc than'
+        ' it was previously run with. Use this flag'
+        ' to disable this check.'
+    ),
+    action='store_true',
+    default=False,
+    sources={'play'}
+)
+UPGRADE_OPTION = OptionSettings(
+    '--upgrade',
+    help=(
+        'Allow the workflow to be restarted with'
+        ' a newer version of Cylc.'
+    ),
+    action='store_true',
+    default=False,
+    sources={'play'}
 )
 
 PLAY_RUN_MODE = deepcopy(RUN_MODE)
@@ -139,11 +163,11 @@ PLAY_RUN_MODE.sources = {'play'}
 
 PLAY_OPTIONS = [
     OptionSettings(
-        ["-N", "--no-detach", "--non-daemon"],
+        "-N", "--no-detach", "--non-daemon",
         help="Do not daemonize the scheduler (infers --format=plain)",
         action='store_true', dest="no_detach", sources={'play'}),
     OptionSettings(
-        ["--profile"],
+        "--profile",
         help="Output profiling (performance) information",
         action='store_true',
         default=False,
@@ -151,7 +175,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--start-cycle-point", "--startcp"],
+        "--start-cycle-point", "--startcp",
         help=(
             "Set the start cycle point, which may be after"
             " the initial cycle point. If the specified start point is"
@@ -163,7 +187,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--final-cycle-point", "--fcp"],
+        "--final-cycle-point", "--fcp",
         help=(
             "Set the final cycle point. This command line option overrides"
             " the workflow config option"
@@ -174,7 +198,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--stop-cycle-point", "--stopcp"],
+        "--stop-cycle-point", "--stopcp",
         help=(
             "Set the stop cycle point. Shut down after all"
             " have PASSED this cycle point. (Not to be confused"
@@ -187,7 +211,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--start-task", "--starttask", "-t"],
+        "--start-task", "--starttask", "-t",
         help=(
             "Start from this task instance, given by '<cycle>/<name>'."
             " This can be used multiple times to start from multiple"
@@ -201,7 +225,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--pause"],
+        "--pause",
         help="Pause the workflow immediately on start up.",
         action='store_true',
         default=False,
@@ -209,7 +233,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--hold-after", "--hold-cycle-point", "--holdcp"],
+        "--hold-after", "--hold-cycle-point", "--holdcp",
         help="Hold all tasks after this cycle point.",
         metavar="CYCLE_POINT",
         action='store',
@@ -217,7 +241,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--reference-log"],
+        "--reference-log",
         help="Generate a reference log for use in reference ",
         action='store_true',
         default=False,
@@ -225,7 +249,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--reference-test"],
+        "--reference-test",
         help="Do a test run against a previously generated reference.",
         action='store_true',
         default=False,
@@ -233,7 +257,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--host"],
+        "--host",
         help=(
             "Specify the host on which to start-up the workflow."
             " If not specified, a host will be selected using"
@@ -244,7 +268,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--format"],
+        "--format",
         help="The format of the output: 'plain'=human readable, 'json'",
         choices=('plain', 'json'),
         default="plain",
@@ -252,7 +276,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--main-loop"],
+        "--main-loop",
         help=(
             "Specify an additional plugin to run in the main"
             " These are used in combination with those specified"
@@ -263,7 +287,7 @@ PLAY_OPTIONS = [
         sources={'play'},
     ),
     OptionSettings(
-        ["--abort-if-any-task-fails"],
+        "--abort-if-any-task-fails",
         help="If set workflow will abort with status 1 if any task fails.",
         action='store_true',
         default=False,
@@ -272,30 +296,8 @@ PLAY_OPTIONS = [
     ),
     PLAY_ICP_OPTION,
     PLAY_RUN_MODE,
-    OptionSettings(
-        ['--downgrade'],
-        help=(
-            'Allow the workflow to be restarted with an'
-            ' older version of Cylc, NOT RECOMMENDED.'
-            ' By default Cylc prevents you from restarting'
-            ' a workflow with an older version of Cylc than'
-            ' it was previously run with. Use this flag'
-            ' to disable this check.'
-        ),
-        action='store_true',
-        default=False,
-        sources={'play'}
-    ),
-    OptionSettings(
-        ['--upgrade'],
-        help=(
-            'Allow the workflow to be restarted with'
-            ' a newer version of Cylc.'
-        ),
-        action='store_true',
-        default=False,
-        sources={'play'}
-    ),
+    DOWNGRADE_OPTION,
+    UPGRADE_OPTION,
 ]
 
 
@@ -310,7 +312,7 @@ def get_option_parser(add_std_opts: bool = False) -> COP:
     )
 
     for option in PLAY_OPTIONS:
-        parser.add_option(*option.args, **option.kwargs)
+        parser.add_option(*option.opts, **option.attrs)
 
     if add_std_opts:
         # This is for the API wrapper for integration tests. Otherwise (CLI
@@ -537,7 +539,10 @@ def _version_check(
                 )
                 return options.upgrade
             # we are in non-interactive mode, abort abort abort
-            print('Use "--upgrade" to upgrade the workflow.', file=sys.stderr)
+            print(
+                f'Use "{UPGRADE_OPTION.opt_string}" to upgrade the workflow.',
+                file=sys.stderr
+            )
             return False
         elif itt > 2 and this > that:
             # restart would INCREASE the Cylc version in a little way
@@ -610,8 +615,8 @@ def _distribute(
         cmd.append("--host=localhost")
 
         # Ensure interactive upgrade carries over:
-        if options.upgrade and '--upgrade' not in cmd:
-            cmd.append('--upgrade')
+        if options.upgrade and UPGRADE_OPTION.opt_string not in cmd:
+            cmd.append(UPGRADE_OPTION.opt_string)
 
         # Preserve CLI colour
         if is_terminal() and options.color != 'never':
