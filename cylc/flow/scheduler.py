@@ -257,6 +257,7 @@ class Scheduler:
     time_next_kill: Optional[float] = None
 
     def __init__(self, id_: str, options: 'Values') -> None:
+        import debugpy; debugpy.listen(6678); print('Waiting for debugger attach'); debugpy.wait_for_client()
         # flow information
         self.workflow = id_
         self.workflow_name = get_workflow_name_from_id(self.workflow)

@@ -664,6 +664,12 @@ class WorkflowDatabaseManager:
     def remove_task_from_flows(
         self, point: str, name: str, flow_nums: 'FlowNums'
     ) -> None:
+        """Remove flow numbers for a task in the task_states and task_outputs
+        tables.
+
+        N.B. the task_prerequisites table is automatically updated separately
+        during the main loop.
+        """
         for table in (
             self.TABLE_TASK_STATES,
             self.TABLE_TASK_OUTPUTS,

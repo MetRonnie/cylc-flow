@@ -18,18 +18,38 @@
 
 import math
 import re
-from typing import Iterable, Set, TYPE_CHECKING
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    Iterable,
+    NamedTuple,
+    Optional,
+    Set,
+    Union,
+)
+
+from typing_extensions import Literal
 
 from cylc.flow.cycling.loader import get_point
+from cylc.flow.data_messages_pb2 import PbCondition, PbPrerequisite
 from cylc.flow.exceptions import TriggerExpressionError
-from cylc.flow.data_messages_pb2 import (
-    PbPrerequisite,
-    PbCondition,
-)
-from cylc.flow.id import quick_relative_detokenise
+from cylc.flow.id import quick_relative_id
+
 
 if TYPE_CHECKING:
+    from cylc.flow.cycling import PointBase
     from cylc.flow.id import Tokens
+
+
+class PrereqMessage(NamedTuple):
+    """A message pertaining to a Prerequisite."""
+    point: str
+    task: str
+    output: str
+
+    def get_id(self) -> str:
+        """Quick detokenisation of the task name."""
+        return quick_relative_id(self.point, self.task)
 
 
 class Prerequisite:
@@ -60,24 +80,26 @@ class Prerequisite:
     DEP_STATE_OVERRIDDEN = 'force satisfied'
     DEP_STATE_UNSATISFIED = False
 
-    def __init__(self, point):
+    def __init__(self, point: 'PointBase'):
         # The cycle point to which this prerequisite belongs.
         # cylc.flow.cycling.PointBase
         self.point = point
 
         # Dictionary of messages pertaining to this prerequisite.
         # {('point string', 'task name', 'output'): DEP_STATE_X, ...}
-        self.satisfied = {}
+        self.satisfied: Dict[
+            PrereqMessage, Union[str, Literal[False]]
+        ] = {}
 
         # Expression present only when conditions are used.
         # '1/foo failed & 1/bar succeeded'
-        self.conditional_expression = None
+        self.conditional_expression: Optional[str] = None
 
         # The cached state of this prerequisite:
         # * `None` (no cached state)
         # * `True` (prerequisite satisfied)
         # * `False` (prerequisite unsatisfied).
-        self._all_satisfied = None
+        self._all_satisfied: Optional[bool] = None
 
     def instantaneous_hash(self):
         """Generate a hash of this prerequisite in its current state.
@@ -101,7 +123,7 @@ class Prerequisite:
             pre_initial (bool): this is a pre-initial dependency.
 
         """
-        message = (str(point), name, output)
+        message = PrereqMessage(str(point), name, output)
 
         # Add a new prerequisite as satisfied if pre-initial, else unsatisfied.
         if pre_initial:
@@ -208,7 +230,9 @@ class Prerequisite:
         """
         valid = set()
         for output in outputs:
-            prereq = (output['cycle'], output['task'], output['task_sel'])
+            prereq = PrereqMessage(
+                output['cycle'], output['task'], output['task_sel']
+            )
             if prereq not in self.satisfied:
                 continue
             valid.add(output)
@@ -235,8 +259,7 @@ class Prerequisite:
         conds = []
         num_length = math.ceil(len(self.satisfied) / 10)
         for ind, message_tuple in enumerate(sorted(self.satisfied)):
-            point, name = message_tuple[0:2]
-            t_id = quick_relative_detokenise(point, name)
+            t_id = message_tuple.get_id()
             char = 'c%.{0}d'.format(num_length) % ind
             c_msg = self.MESSAGE_TEMPLATE % message_tuple
             c_val = self.satisfied[message_tuple]
@@ -247,7 +270,7 @@ class Prerequisite:
                 PbCondition(
                     task_proxy=t_id,
                     expr_alias=char,
-                    req_state=message_tuple[2],
+                    req_state=message_tuple.output,
                     satisfied=c_bool,
                     message=c_val,
                 )
@@ -276,7 +299,7 @@ class Prerequisite:
 
     def iter_target_point_strings(self):
         yield from {
-            message[0]
+            message.point
             for message in self.satisfied
         }
 
@@ -293,6 +316,8 @@ class Prerequisite:
         E.G: ['1/foo', '2/bar']
 
         """
-        return [f'{point}/{name}' for
-                (point, name, _), satisfied in self.satisfied.items() if
-                satisfied == self.DEP_STATE_SATISFIED]
+        return [
+            msg.get_id()
+            for msg, satisfied in self.satisfied.items()
+            if satisfied == self.DEP_STATE_SATISFIED
+        ]
