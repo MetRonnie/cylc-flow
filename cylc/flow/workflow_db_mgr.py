@@ -662,7 +662,7 @@ class WorkflowDatabaseManager:
         self.db_updates_map[table_name].append((set_args, where_args))
 
     def remove_task_from_flows(
-        self, point: str, name: str, flow_nums: FlowNums
+        self, point: str, name: str, flow_nums: 'FlowNums'
     ) -> None:
         if not flow_nums:
             stmt = rf'''
