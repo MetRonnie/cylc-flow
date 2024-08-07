@@ -438,7 +438,7 @@ class TaskJobManager:
                 # Log and persist
                 LOG.debug(f"[{itask}] host={host}")
                 self.workflow_db_mgr.put_insert_task_jobs(itask, {
-                    'flow_nums': serialise_set(itask.flow_nums),
+                    'flow_nums': serialise_set(itask.flow_nums), # WHA?
                     'is_manual_submit': itask.is_manual_submit,
                     'try_num': itask.get_try_num(),
                     'time_submit': get_current_time_string(),

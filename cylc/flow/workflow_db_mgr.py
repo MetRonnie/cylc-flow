@@ -717,6 +717,48 @@ class WorkflowDatabaseManager:
                 (stmt, params)
             )
 
+        # UGH, this is all undone by the next task pool update:
+
+        # table = self.TABLE_TASK_PREREQUISITES
+        # select_stmt = rf'''
+        #     SELECT
+        #         cycle,
+        #         name,
+        #         flow_nums
+        #     FROM
+        #         {table}
+        #     WHERE
+        #         prereq_cycle = ?
+        #         AND prereq_name = ?
+        # '''
+        # rows = [
+        #     (dep_point, dep_name, dep_flow_nums)
+        #     for dep_point, dep_name, dep_flow_nums in (
+        #         self.pri_dao.connect().execute(select_stmt, (point, name))
+        #     )
+        #     if (
+        #         not flow_nums
+        #         or deserialise_set(dep_flow_nums).intersection(flow_nums)
+        #     )
+        # ]
+        # stmt = rf'''
+        #     UPDATE OR IGNORE
+        #         {table}
+        #     SET
+        #         satisfied = "0"
+        #     WHERE
+        #         cycle = ?
+        #         AND name = ?
+        #         AND flow_nums = ?
+        #         AND prereq_cycle = ?
+        #         AND prereq_name = ?
+        # '''
+        # params = [
+        #     (dep_point, dep_name, dep_flow_nums, point, name)
+        #     for dep_point, dep_name, dep_flow_nums in rows
+        # ]
+        # self.db_updates_map[table].append((stmt, params))
+
     def recover_pub_from_pri(self):
         """Recover public database from private database."""
         if self.pub_dao.n_tries >= self.pub_dao.MAX_TRIES:

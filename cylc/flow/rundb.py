@@ -1128,6 +1128,27 @@ class CylcWorkflowDAO:
         stmt = form_stmt % form_data
         return list(self.connect().execute(stmt))
 
+    # def select_task_state_flow_nums(
+    #     self, cycle: 'PointBase', name: str, match_flow_nums: Iterable[int]
+    # ) -> Iterable[Tuple[str, str, str]]:
+    #     if match_flow_nums:
+    #         instr_condition = ' + '.join(
+    #             f'instr(flow_nums, {n})' for n in match_flow_nums
+    #         )
+    #         where_flow_nums = f'AND {instr_condition} > 0'
+    #     else:
+    #         where_flow_nums = ''
+    #     stmt = rf'''
+    #         SELECT cycle, name, flow_nums
+    #         FROM {self.TABLE_TASK_STATES}
+    #         WHERE cycle == ? AND name == ? {where_flow_nums}
+    #     '''
+    #     args = {
+    #         'cycle': str(cycle),
+    #         'name': name
+    #     }
+    #     return self.connect().execute(stmt, args)
+
     def vacuum(self):
         """Vacuum to the database."""
         return self.connect().execute("VACUUM")
