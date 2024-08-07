@@ -17,19 +17,18 @@
 """Cylc command argument validation logic."""
 
 
-from typing import (
-    Iterable,
-    List,
-    Optional,
-)
+from typing import Iterable, List, Optional
 
 from cylc.flow.exceptions import InputError
+from cylc.flow.flow_mgr import FLOW_ALL, FLOW_NEW, FLOW_NONE
 from cylc.flow.id import IDTokens, Tokens
 from cylc.flow.task_outputs import TASK_OUTPUT_SUCCEEDED
-from cylc.flow.flow_mgr import FLOW_ALL, FLOW_NEW, FLOW_NONE
 
 
-ERR_OPT_FLOW_VAL = "Flow values must be an integer, or 'all', 'new', or 'none'"
+ERR_OPT_FLOW_VAL = (
+    f"Flow values must be an integer, or '{FLOW_ALL}', '{FLOW_NEW}', "
+    f"or '{FLOW_NONE}'"
+)
 ERR_OPT_FLOW_INT = "Multiple flow options must all be integer valued"
 ERR_OPT_FLOW_WAIT = (
     f"--wait is not compatible with --flow={FLOW_NEW} or --flow={FLOW_NONE}"
