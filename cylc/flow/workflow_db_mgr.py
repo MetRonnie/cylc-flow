@@ -664,54 +664,58 @@ class WorkflowDatabaseManager:
     def remove_task_from_flows(
         self, point: str, name: str, flow_nums: 'FlowNums'
     ) -> None:
-        if not flow_nums:
-            stmt = rf'''
-                UPDATE OR REPLACE
-                    {self.TABLE_TASK_STATES}
-                SET
-                    flow_nums = "{serialise_set()}"
-                WHERE
-                    cycle = ?
-                    AND name = ?
-            '''
-            params: List[tuple] = [(point, name)]
-        else:
-            select_stmt = rf'''
-                SELECT
-                    flow_nums
-                FROM
-                    {self.TABLE_TASK_STATES}
-                WHERE
-                    cycle = ?
-                    AND name = ?
-            '''
-            # Mapping of existing flow nums to what is left after removing
-            # the specified flow nums:
-            flow_nums_map: Dict[str, FlowNums] = {
-                x: deserialise_set(x).difference(flow_nums)
-                for x, *_ in
-                self.pri_dao.connect().execute(select_stmt, (point, name))
-                if deserialise_set(x).intersection(flow_nums)
-            }
+        for table in (
+            self.TABLE_TASK_STATES,
+            self.TABLE_TASK_OUTPUTS,
+        ):
+            if not flow_nums:
+                stmt = rf'''
+                    UPDATE OR REPLACE
+                        {table}
+                    SET
+                        flow_nums = "{serialise_set()}"
+                    WHERE
+                        cycle = ?
+                        AND name = ?
+                '''
+                params: List[tuple] = [(point, name)]
+            else:
+                select_stmt = rf'''
+                    SELECT
+                        flow_nums
+                    FROM
+                        {table}
+                    WHERE
+                        cycle = ?
+                        AND name = ?
+                '''
+                # Mapping of existing flow nums to what is left after removing
+                # the specified flow nums:
+                flow_nums_map: Dict[str, FlowNums] = {
+                    x: deserialise_set(x).difference(flow_nums)
+                    for x, *_ in
+                    self.pri_dao.connect().execute(select_stmt, (point, name))
+                    if deserialise_set(x).intersection(flow_nums)
+                }
 
-            stmt = rf'''
-                UPDATE OR REPLACE
-                    {self.TABLE_TASK_STATES}
-                SET
-                    flow_nums = ?
-                WHERE
-                    cycle = ?
-                    AND name = ?
-                    AND flow_nums = ?
-            '''
-            params = [
-                (serialise_set(new), point, name, old)
-                for old, new in flow_nums_map.items()
-            ]
+                stmt = rf'''
+                    UPDATE OR REPLACE
+                        {table}
+                    SET
+                        flow_nums = ?
+                    WHERE
+                        cycle = ?
+                        AND name = ?
+                        AND flow_nums = ?
+                '''
+                params = [
+                    (serialise_set(new), point, name, old)
+                    for old, new in flow_nums_map.items()
+                ]
 
-        self.db_updates_map[self.TABLE_TASK_STATES].append(
-            (stmt, params)
-        )
+            self.db_updates_map[table].append(
+                (stmt, params)
+            )
 
     def recover_pub_from_pri(self):
         """Recover public database from private database."""
