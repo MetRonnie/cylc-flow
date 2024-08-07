@@ -25,6 +25,7 @@ This module provides the logic to:
 
 import json
 import os
+from collections import defaultdict
 from shutil import copy, rmtree
 from sqlite3 import OperationalError
 from tempfile import mkstemp
@@ -32,6 +33,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     AnyStr,
+    DefaultDict,
     Dict,
     List,
     Optional,
@@ -53,18 +55,15 @@ from cylc.flow.wallclock import get_current_time_string, get_utc_mode
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from packaging.version import Version
+
     from cylc.flow.cycling import PointBase
+    from cylc.flow.flow_mgr import FlowNums
+    from cylc.flow.rundb import DbArgDict, DbUpdateTuple
     from cylc.flow.scheduler import Scheduler
     from cylc.flow.task_events_mgr import EventKey
     from cylc.flow.task_pool import TaskPool
     from cylc.flow.task_proxy import TaskProxy
-
-
-Version = Any
-# TODO: narrow down Any (should be str | int) after implementing type
-# annotations in cylc.flow.task_state.TaskState
-DbArgDict = Dict[str, Any]
-DbUpdateTuple = Tuple[DbArgDict, DbArgDict]
 
 
 PERM_PRIVATE = 0o600  # -rw-------
@@ -151,7 +150,9 @@ class WorkflowDatabaseManager:
             self.TABLE_TASKS_TO_HOLD: [],
             self.TABLE_XTRIGGERS: [],
             self.TABLE_ABS_OUTPUTS: []}
-        self.db_updates_map: Dict[str, List[DbUpdateTuple]] = {}
+        self.db_updates_map: DefaultDict[
+            str, List[DbUpdateTuple]
+        ] = defaultdict(list)
 
     def copy_pri_to_pub(self) -> None:
         """Copy content of primary database file to public database file."""
@@ -242,29 +243,23 @@ class WorkflowDatabaseManager:
         # Record workflow parameters and tasks in pool
         # Record any broadcast settings to be dumped out
         if any(self.db_deletes_map.values()):
-            for table_name, db_deletes in sorted(
-                    self.db_deletes_map.items()):
+            for table_name, db_deletes in sorted(self.db_deletes_map.items()):
                 while db_deletes:
                     where_args = db_deletes.pop(0)
                     self.pri_dao.add_delete_item(table_name, where_args)
                     self.pub_dao.add_delete_item(table_name, where_args)
         if any(self.db_inserts_map.values()):
-            for table_name, db_inserts in sorted(
-                    self.db_inserts_map.items()):
+            for table_name, db_inserts in sorted(self.db_inserts_map.items()):
                 while db_inserts:
                     db_insert = db_inserts.pop(0)
                     self.pri_dao.add_insert_item(table_name, db_insert)
                     self.pub_dao.add_insert_item(table_name, db_insert)
-        if (hasattr(self, 'db_updates_map') and
-                any(self.db_updates_map.values())):
-            for table_name, db_updates in sorted(
-                    self.db_updates_map.items()):
+        if any(self.db_updates_map.values()):
+            for table_name, db_updates in sorted(self.db_updates_map.items()):
                 while db_updates:
-                    set_args, where_args = db_updates.pop(0)
-                    self.pri_dao.add_update_item(
-                        table_name, set_args, where_args)
-                    self.pub_dao.add_update_item(
-                        table_name, set_args, where_args)
+                    db_update = db_updates.pop(0)
+                    self.pri_dao.add_update_item(table_name, db_update)
+                    self.pub_dao.add_update_item(table_name, db_update)
 
         # Previously, we used a separate thread for database writes. This has
         # now been removed. For the private database, there is no real
@@ -444,7 +439,7 @@ class WorkflowDatabaseManager:
         }
         # Note tasks_states table rows are for latest submit_num only
         # (not one row per submit).
-        self.db_updates_map.setdefault(self.TABLE_TASK_STATES, []).append(
+        self.db_updates_map[self.TABLE_TASK_STATES].append(
             (set_args, where_args)
         )
 
@@ -464,7 +459,6 @@ class WorkflowDatabaseManager:
             "name": itask.tdef.name,
             "flow_nums": serialise_set(itask.flow_nums),
         }
-        self.db_updates_map.setdefault(self.TABLE_TASK_STATES, [])
         self.db_updates_map[self.TABLE_TASK_STATES].append(
             (set_args, where_args))
 
@@ -548,7 +542,6 @@ class WorkflowDatabaseManager:
                     "name": itask.tdef.name,
                     "flow_nums": serialise_set(itask.flow_nums)
                 }
-                self.db_updates_map.setdefault(self.TABLE_TASK_STATES, [])
                 self.db_updates_map[self.TABLE_TASK_STATES].append(
                     (set_args, where_args)
                 )
@@ -651,11 +644,13 @@ class WorkflowDatabaseManager:
             "name": itask.tdef.name,
             "flow_nums": serialise_set(itask.flow_nums),
         }
-        self.db_updates_map.setdefault(self.TABLE_TASK_OUTPUTS, []).append(
+        self.db_updates_map[self.TABLE_TASK_OUTPUTS].append(
             (set_args, where_args)
         )
 
-    def _put_update_task_x(self, table_name, itask, set_args):
+    def _put_update_task_x(
+        self, table_name: str, itask: 'TaskProxy', set_args: 'DbArgDict'
+    ) -> None:
         """Put UPDATE statement for a task_* table."""
         where_args = {
             "cycle": str(itask.point),
@@ -664,8 +659,59 @@ class WorkflowDatabaseManager:
             where_args["submit_num"] = itask.submit_num
         if "flow_nums" not in set_args:
             where_args["flow_nums"] = serialise_set(itask.flow_nums)
-        self.db_updates_map.setdefault(table_name, [])
         self.db_updates_map[table_name].append((set_args, where_args))
+
+    def remove_task_from_flows(
+        self, point: str, name: str, flow_nums: FlowNums
+    ) -> None:
+        if not flow_nums:
+            stmt = rf'''
+                UPDATE OR REPLACE
+                    {self.TABLE_TASK_STATES}
+                SET
+                    flow_nums = "{serialise_set()}"
+                WHERE
+                    cycle = ?
+                    AND name = ?
+            '''
+            params: List[tuple] = [(point, name)]
+        else:
+            select_stmt = rf'''
+                SELECT
+                    flow_nums
+                FROM
+                    {self.TABLE_TASK_STATES}
+                WHERE
+                    cycle = ?
+                    AND name = ?
+            '''
+            # Mapping of existing flow nums to what is left after removing
+            # the specified flow nums:
+            flow_nums_map: Dict[str, FlowNums] = {
+                x: deserialise_set(x).difference(flow_nums)
+                for x, *_ in
+                self.pri_dao.connect().execute(select_stmt, (point, name))
+                if deserialise_set(x).intersection(flow_nums)
+            }
+
+            stmt = rf'''
+                UPDATE OR REPLACE
+                    {self.TABLE_TASK_STATES}
+                SET
+                    flow_nums = ?
+                WHERE
+                    cycle = ?
+                    AND name = ?
+                    AND flow_nums = ?
+            '''
+            params = [
+                (serialise_set(new), point, name, old)
+                for old, new in flow_nums_map.items()
+            ]
+
+        self.db_updates_map[self.TABLE_TASK_STATES].append(
+            (stmt, params)
+        )
 
     def recover_pub_from_pri(self):
         """Recover public database from private database."""
@@ -691,7 +737,7 @@ class WorkflowDatabaseManager:
             self.process_queued_ops()
 
     @classmethod
-    def _get_last_run_version(cls, pri_dao: CylcWorkflowDAO) -> Version:
+    def _get_last_run_version(cls, pri_dao: CylcWorkflowDAO) -> 'Version':
         """Return the version of Cylc this DB was last run with.
 
         Args:
@@ -782,7 +828,7 @@ class WorkflowDatabaseManager:
                 cls.upgrade_pre_810(pri_dao)
 
     @classmethod
-    def check_db_compatibility(cls, db_file: Union['Path', str]) -> Version:
+    def check_db_compatibility(cls, db_file: Union['Path', str]) -> 'Version':
         """Check this DB is compatible with this Cylc version.
 
         Raises:
