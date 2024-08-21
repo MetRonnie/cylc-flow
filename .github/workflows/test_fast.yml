@@ -19,16 +19,8 @@ jobs:
     strategy:
       fail-fast: false # don't stop on first failure
       matrix:
-        os: ['ubuntu-latest']
-        python-version: ['3.7', '3.8', '3.10', '3.11', '3']
-        include:
-          # mac os test
-          - os: 'macos-latest'
-            python-version: '3.9'  # oldest supported version
-          # non-utc timezone test
-          - os: 'ubuntu-latest'
-            python-version: '3.9'  # not the oldest, not the most recent version
-            time-zone: 'XXX-09:35'
+        os: ['macos-latest']
+        python-version: ['3.9']
 
     env:
       TZ: ${{ matrix.time-zone }}
@@ -48,6 +40,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y sqlite3
+
+      - uses: MetRonnie/release-actions/detect-dns-problem@dns
 
       # - name: Patch DNS
       #   uses: cylc/release-actions/patch-dns@v1
