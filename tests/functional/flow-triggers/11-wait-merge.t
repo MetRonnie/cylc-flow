@@ -17,7 +17,6 @@
 #-------------------------------------------------------------------------------
 
 . "$(dirname "$0")/test_header"
-skip_macos_gh_actions
 set_test_number 4
 
 install_and_validate "${TEST_NAME_BASE}" "${TEST_NAME_BASE}" true
