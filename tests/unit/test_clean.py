@@ -239,7 +239,7 @@ def test_init_clean__running_workflow(
 
     with pytest.raises(ServiceFileError) as exc:
         init_clean('yavin', opts=CleanOptions())
-    assert "Cannotasfasdfdsafsd clean running workflow" in str(exc.value)
+    assert "Cannot clean running workflow" in str(exc.value)
 
 
 @pytest.mark.parametrize(
