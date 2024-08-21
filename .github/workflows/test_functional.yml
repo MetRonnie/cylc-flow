@@ -113,8 +113,8 @@ jobs:
           ln -s "$CONF_PATH/global.cylc" "$CONF_PATH/global-tests.cylc"
           echo "GLOBAL_CFG_PATH=${CONF_PATH}/global.cylc" >> "$GITHUB_ENV"
 
-      - name: Patch DNS
-        uses: cylc/release-actions/patch-dns@v1
+      # - name: Patch DNS
+      #   uses: cylc/release-actions/patch-dns@v1
 
       - name: Add localhost entries to global config
         if: startsWith(runner.os, 'macos')
