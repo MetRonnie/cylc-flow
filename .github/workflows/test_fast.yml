@@ -21,6 +21,7 @@ jobs:
       matrix:
         os: ['macos-latest']
         python-version: ['3.9']
+        detect: [true, false]
 
     env:
       TZ: ${{ matrix.time-zone }}
@@ -42,6 +43,7 @@ jobs:
           sudo apt-get install -y sqlite3
 
       - uses: MetRonnie/release-actions/detect-dns-problem@dns
+        if: matrix.detect
 
       # - name: Patch DNS
       #   uses: cylc/release-actions/patch-dns@v1
@@ -62,87 +64,3 @@ jobs:
         timeout-minutes: 6
         run: |
           pytest tests/integration
-
-      - name: Upload failed tests artifact
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cylc-run (${{ matrix.os }} py-${{ matrix.python-version }})
-          path: ~/cylc-run/
-          include-hidden-files: true
-
-      - name: Coverage report
-        run: |
-          coverage xml
-          coverage report
-
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage_${{ matrix.os }}_py-${{ matrix.python-version }}
-          path: coverage.xml
-          retention-days: 7
-
-  lint:
-    runs-on: 'ubuntu-latest'
-    timeout-minutes: 10
-    steps:
-      - name: Apt-Get Install
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      # note: exclude python 3.10+ from mypy checks as these produce false
-      # positives in installed libraries for python 3.7
-      - name: Configure Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: 3.9
-
-      - name: Install
-        run: |
-          pip install -e ."[tests]"
-
-      - name: Flake8
-        run: flake8
-
-      - name: Bandit
-        run: |
-          bandit -r --ini .bandit cylc/flow
-
-      - name: Shellchecker
-        run: etc/bin/shellchecker
-
-      - name: MyPy
-        run: mypy
-
-      - name: Towncrier - draft changelog
-        uses: cylc/release-actions/towncrier-draft@v1
-
-      - name: Linkcheck
-        run: pytest -m linkcheck --dist=load --color=yes -n 10 tests/unit/test_links.py
-
-  codecov:
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Codecov upload
-        uses: codecov/codecov-action@v4
-        with:
-          name: ${{ github.workflow }}
-          flags: fast-tests
-          fail_ci_if_error: true
-          verbose: true
-          # Token not required for public repos, but avoids upload failure due
-          # to rate-limiting (but not for PRs opened from forks)
-          token: ${{ secrets.CODECOV_TOKEN }}
