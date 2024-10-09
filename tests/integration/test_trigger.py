@@ -38,7 +38,7 @@ async def test_trigger_invalid(mod_one, start, log_filter, flow_strs):
     async with start(mod_one) as log:
         log.clear()
         assert mod_one.pool.force_trigger_tasks(['*'], flow_strs) is None
-        assert len(log_filter(log, level=logging.WARN)) == 1
+        assert len(log_filter(logging.WARNING)) == 1
 
 
 async def test_trigger_no_flows(one, start, log_filter):

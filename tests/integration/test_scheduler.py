@@ -266,7 +266,7 @@ async def test_unexpected_ParsecError(
             pass
 
     assert log_filter(
-        log, level=logging.CRITICAL,
+        logging.CRITICAL,
         exact_match="Workflow shutting down - Mock error"
     )
     assert TRACEBACK_MSG in log.text
@@ -294,7 +294,7 @@ async def test_error_during_auto_restart(
         async with run(one) as log:
             pass
 
-    assert log_filter(log, level=logging.ERROR, contains=err_msg)
+    assert log_filter(logging.ERROR, err_msg)
     assert TRACEBACK_MSG in log.text
 
 
@@ -360,17 +360,16 @@ async def test_restart_timeout(
 
     # restart the completed workflow
     schd = scheduler(id_)
-    async with run(schd) as log:
+    async with run(schd):
         # it should detect that the workflow has completed and alert the user
         assert log_filter(
-            log,
             contains='This workflow already ran to completion.'
         )
 
         # it should activate a timeout
-        assert log_filter(log, contains='restart timer starts NOW')
+        assert log_filter(contains='restart timer starts NOW')
 
         # when we trigger tasks the timeout should be cleared
         schd.pool.force_trigger_tasks(['1/one'], {1})
         await asyncio.sleep(0)  # yield control to the main loop
-        assert log_filter(log, contains='restart timer stopped')
+        assert log_filter(contains='restart timer stopped')
