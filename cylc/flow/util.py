@@ -170,8 +170,8 @@ def deserialise_set(flow_num_str: str) -> set:
     """Convert json string to set.
 
     Example:
-    >>> sorted(deserialise_set('[2, 3]'))
-    [2, 3]
+    >>> deserialise_set('[2, 3]') == {2, 3}
+    True
 
     """
     return set(json.loads(flow_num_str))
