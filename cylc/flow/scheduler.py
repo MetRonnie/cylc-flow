@@ -31,7 +31,6 @@ import traceback
 from typing import (
     Any,
     AsyncGenerator,
-    Callable,
     Dict,
     Iterable,
     List,
@@ -922,10 +921,6 @@ class Scheduler:
             for _, msg in tms:
                 warn += f'\n  {msg.job_id}: {msg.severity} - "{msg.message}"'
             LOG.warning(warn)
-
-    def get_command_method(self, command_name: str) -> Callable:
-        """Return a command processing method or raise AttributeError."""
-        return getattr(self, f'command_{command_name}')
 
     async def process_command_queue(self) -> None:
         """Process queued commands."""
