@@ -253,7 +253,9 @@ async def test_logging_flow_nums(
         assert schd.pool._get_task_by_id('1/a1').flow_nums == {1}
 
 
-async def test_ref1(flow, scheduler, run, reflog, complete, log_filter):
+async def test_ref1(
+    flow, scheduler, run, reflog, complete, cylc_show, log_filter
+):
     """Test prereqs/stall & re-run behaviour when removing tasks."""
     schd: Scheduler = scheduler(
         flow({
@@ -270,6 +272,9 @@ async def test_ref1(flow, scheduler, run, reflog, complete, log_filter):
         await complete(schd, '1/b')
         assert not schd.pool.is_stalled()
         assert len(schd.pool.task_queue_mgr.queues['default'].deque)
+        assert (
+            await cylc_show(schd, '1/c')
+        )['1/c']['prerequisites'][0]['satisfied'] is True
 
         await run_cmd(remove_tasks(schd, ['1/a', '1/b'], [FLOW_ALL]))
         schd.process_workflow_db_queue()
@@ -279,6 +284,11 @@ async def test_ref1(flow, scheduler, run, reflog, complete, log_filter):
         assert log_filter(
             logging.WARNING, "1/c is waiting on ['1/b:succeeded']"
         )
+        # `cylc show` should reflect the now-unsatisfied prereq:
+        assert (
+            await cylc_show(schd, '1/c')
+        )['1/c']['prerequisites'][0]['satisfied'] is False
+
         assert reflog_triggers == {
             ('1/a', None),
             ('1/b', ('1/a',)),
@@ -288,6 +298,7 @@ async def test_ref1(flow, scheduler, run, reflog, complete, log_filter):
         await run_cmd(force_trigger_tasks(schd, ['1/a'], [FLOW_ALL]))
         await complete(schd, '1/b')
         assert not schd.pool.is_stalled()
+
         assert reflog_triggers == {
             ('1/a', None),
             # 1/b should have run again after 1/a on the re-trigger in flow 1:

@@ -2149,6 +2149,7 @@ class TaskPool:
                 fnums_to_remove = child_itask.match_flows(flow_nums)
                 if not fnums_to_remove:
                     continue
+                prereq_changed = False
                 for prereq in (
                     *child_itask.state.prerequisites,
                     *child_itask.state.suicide_prerequisites,
@@ -2156,9 +2157,12 @@ class TaskPool:
                     for msg in prereq.naturally_satisfied_dependencies():
                         if msg.get_id() == id_:
                             prereq[msg] = False
-                            self.unqueue_task(child_itask)
+                            prereq_changed = True
                             if id_ not in removed:
                                 removed[id_] = fnums_to_remove
+                if prereq_changed:
+                    self.unqueue_task(child_itask)
+                    self.data_store_mgr.delta_task_prerequisite(child_itask)
 
             # Remove from DB tables:
             db_removed_fnums = self.workflow_db_mgr.remove_task_from_flows(
