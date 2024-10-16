@@ -882,6 +882,11 @@ class TaskPool:
                 msg += " - active job orphaned"
 
             LOG.log(level, f"[{itask}] {msg}")
+
+            # ensure this task is written to the DB before moving on
+            # https://github.com/cylc/cylc-flow/issues/6315
+            self.workflow_db_mgr.process_queued_ops()
+
             del itask
 
     def get_tasks(self) -> List[TaskProxy]:
@@ -1314,7 +1319,7 @@ class TaskPool:
         )
         for itask in itasks:
             self.hold_active_task(itask)
-        # Set inactive/future tasks to be held:
+        # Set inactive tasks to be held:
         for name, cycle in inactive_tasks:
             self.data_store_mgr.delta_task_held((name, cycle, True))
         self.tasks_to_hold.update(inactive_tasks)
@@ -1332,7 +1337,7 @@ class TaskPool:
         )
         for itask in itasks:
             self.release_held_active_task(itask)
-        # Unhold inactive/future tasks:
+        # Unhold inactive tasks:
         for name, cycle in inactive_tasks:
             self.data_store_mgr.delta_task_held((name, cycle, False))
         self.tasks_to_hold.difference_update(inactive_tasks)
@@ -1924,11 +1929,6 @@ class TaskPool:
             flow_descr: description of new flow
 
         """
-        flow_nums = self._get_flow_nums(flow, flow_descr)
-        if flow_nums is None:
-            # Illegal flow command opts
-            return
-
         # Get matching pool tasks and inactive task definitions.
         itasks, inactive_tasks, unmatched = self.filter_task_proxies(
             items,
@@ -1936,14 +1936,20 @@ class TaskPool:
             warn_no_active=False,
         )
 
+        flow_nums = self._get_flow_nums(flow, flow_descr)
+
+        # Set existing task proxies.
         for itask in itasks:
-            # Existing task proxies.
             self.merge_flows(itask, flow_nums)
             if prereqs:
                 self._set_prereqs_itask(itask, prereqs, flow_nums)
             else:
                 self._set_outputs_itask(itask, outputs)
 
+        # Spawn and set inactive tasks.
+        if not flow:
+            # default: assign to all active flows
+            flow_nums = self._get_active_flow_nums()
         for name, point in inactive_tasks:
             tdef = self.config.get_taskdef(name)
             if prereqs:
@@ -2031,7 +2037,7 @@ class TaskPool:
     def _set_prereqs_tdef(
         self, point, taskdef, prereqs, flow_nums, flow_wait
     ):
-        """Spawn a future task and set prerequisites on it."""
+        """Spawn an inactive task and set prerequisites on it."""
 
         itask = self.spawn_task(
             taskdef.name, point, flow_nums, flow_wait=flow_wait
@@ -2170,38 +2176,30 @@ class TaskPool:
             self.release_runahead_tasks()
 
     def _get_flow_nums(
-            self,
-            flow: List[str],
-            meta: Optional[str] = None,
-    ) -> Optional[Set[int]]:
-        """Get correct flow numbers given user command options."""
-        if set(flow).intersection({FLOW_ALL, FLOW_NEW, FLOW_NONE}):
-            if len(flow) != 1:
-                LOG.warning(
-                    f'The "flow" values {FLOW_ALL}, {FLOW_NEW} & {FLOW_NONE}'
-                    ' cannot be used in combination with integer flow numbers.'
-                )
-                return None
-            if flow[0] == FLOW_ALL:
-                flow_nums = self._get_active_flow_nums()
-            elif flow[0] == FLOW_NEW:
-                flow_nums = {self.flow_mgr.get_flow_num(meta=meta)}
-            elif flow[0] == FLOW_NONE:
-                flow_nums = set()
-        else:
-            try:
-                flow_nums = {
-                    self.flow_mgr.get_flow_num(
-                        flow_num=int(n), meta=meta
-                    )
-                    for n in flow
-                }
-            except ValueError:
-                LOG.warning(
-                    f"Ignoring command: illegal flow values {flow}"
-                )
-                return None
-        return flow_nums
+        self,
+        flow: List[str],
+        meta: Optional[str] = None,
+    ) -> Set[int]:
+        """Return flow numbers corresponding to user command options.
+
+        Arg should have been validated already during command validation.
+
+        In the default case (--flow option not provided), stick with the
+        existing flows (so return empty set) - NOTE this only applies for
+        active tasks.
+
+        """
+        if flow == [FLOW_NONE]:
+            return set()
+        if flow == [FLOW_ALL]:
+            return self._get_active_flow_nums()
+        if flow == [FLOW_NEW]:
+            return {self.flow_mgr.get_flow_num(meta=meta)}
+        # else specific flow numbers:
+        return {
+            self.flow_mgr.get_flow_num(flow_num=int(n), meta=meta)
+            for n in flow
+        }
 
     def _force_trigger(self, itask):
         """Assumes task is in the pool"""
@@ -2264,17 +2262,14 @@ class TaskPool:
               unless flow-wait is set.
 
         """
-        # Get flow numbers for the tasks to be triggered.
-        flow_nums = self._get_flow_nums(flow, flow_descr)
-        if flow_nums is None:
-            return
-
         # Get matching tasks proxies, and matching inactive task IDs.
         existing_tasks, inactive_ids, unmatched = self.filter_task_proxies(
             items, inactive=True, warn_no_active=False,
         )
 
-        # Trigger existing tasks.
+        flow_nums = self._get_flow_nums(flow, flow_descr)
+
+        # Trigger active tasks.
         for itask in existing_tasks:
             if itask.state(TASK_STATUS_PREPARING, *TASK_STATUSES_ACTIVE):
                 LOG.warning(f"[{itask}] ignoring trigger - already active")
@@ -2283,11 +2278,12 @@ class TaskPool:
             self._force_trigger(itask)
 
         # Spawn and trigger inactive tasks.
+        if not flow:
+            # default: assign to all active flows
+            flow_nums = self._get_active_flow_nums()
         for name, point in inactive_ids:
-
             if not self.can_be_spawned(name, point):
                 continue
-
             submit_num, _, prev_fwait = (
                 self._get_task_history(name, point, flow_nums)
             )
