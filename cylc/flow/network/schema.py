@@ -2139,9 +2139,8 @@ class Remove(Mutation, TaskMutation):
             description=sstrip(f'''
                 "Remove the task(s) from the specified flows. "
 
-                This should be a list of flow numbers OR a single-item list
-                containing {FLOW_ALL}, to remove task(s) from all flows
-                (which is the default).
+                This should be a list of flow numbers OR {FLOW_ALL},
+                to remove task(s) from all flows (which is the default).
             ''')
         )
 
