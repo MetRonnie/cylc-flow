@@ -42,7 +42,8 @@ def example_workflow(flow):
 
 def get_data_store_flow_nums(schd: Scheduler, itask: TaskProxy):
     _, ds_tproxy = schd.data_store_mgr.store_node_fetcher(itask.tokens)
-    return ds_tproxy.flow_nums
+    if ds_tproxy:
+        return ds_tproxy.flow_nums
 
 
 async def test_basic(
@@ -52,7 +53,9 @@ async def test_basic(
     schd: Scheduler = scheduler(example_workflow)
     async with start(schd):
         a1 = schd.pool._get_task_by_id('1/a1')
+        a2 = schd.pool._get_task_by_id('1/a2')
         schd.pool.spawn_on_output(a1, TASK_OUTPUT_SUCCEEDED)
+        schd.pool.spawn_on_output(a2, TASK_OUTPUT_SUCCEEDED)
         await schd.update_data_structure()
 
         assert a1 in schd.pool.get_tasks()
@@ -253,10 +256,8 @@ async def test_logging_flow_nums(
         assert schd.pool._get_task_by_id('1/a1').flow_nums == {1}
 
 
-async def test_ref1(
-    flow, scheduler, run, reflog, complete, cylc_show, log_filter
-):
-    """Test prereqs/stall & re-run behaviour when removing tasks."""
+async def test_retrigger(flow, scheduler, run, reflog, complete):
+    """Test prereqs & re-run behaviour when removing tasks."""
     schd: Scheduler = scheduler(
         flow({
             'scheduling': {
@@ -270,13 +271,54 @@ async def test_ref1(
     async with run(schd):
         reflog_triggers: set = reflog(schd)
         await complete(schd, '1/b')
-        assert not schd.pool.is_stalled()
-        assert len(schd.pool.task_queue_mgr.queues['default'].deque)
-        assert (
-            await cylc_show(schd, '1/c')
-        )['1/c']['prerequisites'][0]['satisfied'] is True
 
         await run_cmd(remove_tasks(schd, ['1/a', '1/b'], [FLOW_ALL]))
+        schd.process_workflow_db_queue()
+        # Removing 1/b should un-queue 1/c:
+        assert len(schd.pool.task_queue_mgr.queues['default'].deque) == 0
+
+        assert reflog_triggers == {
+            ('1/a', None),
+            ('1/b', ('1/a',)),
+        }
+        reflog_triggers.clear()
+
+        await run_cmd(force_trigger_tasks(schd, ['1/a'], []))
+        await complete(schd)
+
+    assert reflog_triggers == {
+        ('1/a', None),
+        # 1/b should have run again after 1/a on the re-trigger in flow 1:
+        ('1/b', ('1/a',)),
+        ('1/c', ('1/b',)),
+    }
+
+
+async def test_prereqs(
+    flow, scheduler, run, reflog, complete, cylc_show, log_filter
+):
+    """Test prereqs & stall behaviour when removing tasks."""
+    schd: Scheduler = scheduler(
+        flow({
+            'scheduling': {
+                'graph': {
+                    'R1': '(a1 | a2) & b => c',
+                },
+            },
+        }),
+        paused_start=False,
+    )
+    async with run(schd):
+        reflog_triggers: set = reflog(schd)
+        await complete(schd, '1/a1', '1/a2', '1/b')
+        assert not schd.pool.is_stalled()
+        assert len(schd.pool.task_queue_mgr.queues['default'].deque)
+        assert {
+            i['satisfied']
+            for i in (await cylc_show(schd, '1/c'))['1/c']['prerequisites']
+        } == {True}
+
+        await run_cmd(remove_tasks(schd, ['1/a1', '1/b',], [FLOW_ALL]))
         schd.process_workflow_db_queue()
         # Removing 1/b should cause stall because it is prereq of 1/c:
         assert len(schd.pool.task_queue_mgr.queues['default'].deque) == 0
@@ -285,22 +327,13 @@ async def test_ref1(
             logging.WARNING, "1/c is waiting on ['1/b:succeeded']"
         )
         # `cylc show` should reflect the now-unsatisfied prereq:
-        assert (
-            await cylc_show(schd, '1/c')
-        )['1/c']['prerequisites'][0]['satisfied'] is False
+        assert {
+            i['satisfied']
+            for i in (await cylc_show(schd, '1/c'))['1/c']['prerequisites']
+        } == {True, False}
 
-        assert reflog_triggers == {
-            ('1/a', None),
-            ('1/b', ('1/a',)),
-        }
-        reflog_triggers.clear()
-
-        await run_cmd(force_trigger_tasks(schd, ['1/a'], [FLOW_ALL]))
-        await complete(schd, '1/b')
-        assert not schd.pool.is_stalled()
-
-        assert reflog_triggers == {
-            ('1/a', None),
-            # 1/b should have run again after 1/a on the re-trigger in flow 1:
-            ('1/b', ('1/a',)),
-        }
+    assert reflog_triggers == {
+        ('1/a1', None),
+        ('1/a2', None),
+        ('1/b', None),
+    }

@@ -2160,9 +2160,32 @@ class TaskPool:
                             prereq_changed = True
                             if id_ not in removed:
                                 removed[id_] = fnums_to_remove
-                if prereq_changed:
-                    self.unqueue_task(child_itask)
-                    self.data_store_mgr.delta_task_prerequisite(child_itask)
+                if (not prereq_changed) or all(
+                    pre.is_satisfied()
+                    for pre in child_itask.state.prerequisites
+                ):
+                    continue
+                self.data_store_mgr.delta_task_prerequisite(child_itask)
+                if (
+                    # Skip tasks we are already dealing with:
+                    child_itask.identity in matched_task_ids
+                    # Or tasks that are also in other flows:
+                    or child_itask.flow_nums != fnums_to_remove
+                ):
+                    continue
+                # Downstream task no longer ready to run
+                self.unqueue_task(child_itask)
+                if not any(
+                    pre.is_satisfied()
+                    for pre in child_itask.state.prerequisites
+                ):
+                    # Downstream task no longer has reason to be in pool
+                    self.remove(child_itask, 'upstream task(s) removed')
+                    # Remove from DB tables to ensure it is not skipped
+                    # in future:
+                    self.workflow_db_mgr.remove_task_from_flows(
+                        str(child.point), child.name, fnums_to_remove
+                    )
 
             # Remove from DB tables:
             db_removed_fnums = self.workflow_db_mgr.remove_task_from_flows(
