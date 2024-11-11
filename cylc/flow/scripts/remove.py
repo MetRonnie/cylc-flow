@@ -18,25 +18,26 @@
 
 """cylc remove [OPTIONS] ARGS
 
-Remove task instances from a running workflow and the workflow's history.
+Remove tasks from a running workflow and the workflow's history.
 
-This removes the task(s) from any specified flows. The task will still exist,
-just not in the specified flows, so will not influence the evolution of
-the workflow in those flows.
+By default, the specified task(s) will be removed from all flows, making it
+as if the task(s) never ran. The task(s) and their outputs will be left in the
+`None` flow to preserve a record that they ran, however.
 
-If a task is removed from all flows, it and its outputs will be left in the
-`None` flow. This preserves a record that the task ran, but it will not
-influence any flows in any way.
+If you specify flow(s) to remove a task from (not all flows that it belongs to)
+then the task will still exist in the remaining flow(s), but it will not
+influence the evolution of the workflow in the specified flow(s).
+
+Removing a submitted or running task will also kill it (see "cylc kill").
 
 Examples:
-  # remove a task which has already run
-  # (any tasks downstream of this task which have already run or are currently
-  # running will be left alone The task and its outputs will be left in the
-  # None flow)
+  # Remove a task that already ran.
+  # (Any downstream tasks that are already running or finished will be
+  # left alone. The task and its outputs will be left in the None flow)
   $ cylc remove <id>
 
-  # remove a task from a specified flow
-  # (the task may remain in other flows)
+  # Remove a task from a specified flow.
+  # (The task may remain in other flows)
   $ cylc remove <id> --flow=1
 """
 
@@ -89,10 +90,9 @@ def get_option_parser() -> COP:
         dest='flow',
         metavar='FLOW',
         help=(
-            "Remove the task(s) from the specified flow number. "
+            "Remove the task(s) from the specified flow. "
             "Reuse the option to remove the task(s) from multiple flows. "
-            "If the option is not used at all, the task(s) will be removed "
-            "from all flows."
+            "(By default, the task(s) will be removed from all flows.)"
         ),
     )
 
