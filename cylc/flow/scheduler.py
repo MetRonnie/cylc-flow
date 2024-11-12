@@ -1139,13 +1139,13 @@ class Scheduler:
                     continue
                 # No longer has reason to be in pool:
                 self.pool.remove(child_itask, 'prerequisite task(s) removed')
-                # Remove from DB tables to ensure it is not skipped if it
-                # respawns in future:
+                # Remove this downstream task from flows in DB tables to ensure
+                # it is not skipped if it respawns in future:
                 self.workflow_db_mgr.remove_task_from_flows(
                     str(child.point), child.name, fnums_to_remove
                 )
 
-            # Remove from DB tables:
+            # Remove the matched tasks from the flows in the DB tables:
             db_removed_fnums = self.workflow_db_mgr.remove_task_from_flows(
                 point_str, name, flow_nums
             )

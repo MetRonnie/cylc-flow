@@ -18,15 +18,17 @@
 
 """cylc remove [OPTIONS] ARGS
 
-Remove tasks from a running workflow and the workflow's history.
+Erase the run-history of tasks, allowing them to run again in the same flow.
 
-By default, the specified task(s) will be removed from all flows, making it
-as if the task(s) never ran. The task(s) and their outputs will be left in the
-`None` flow to preserve a record that they ran, however.
+By default, the specified task(s) will be removed from all flows.
 
-If you specify flow(s) to remove a task from (not all flows that it belongs to)
-then the task will still exist in the remaining flow(s), but it will not
-influence the evolution of the workflow in the specified flow(s).
+Tasks removed from all flows, and any waiting downstream tasks spawned by
+their outputs, will be recorded in the `None` flow and will not affect
+the evolution of the workflow.
+
+If you remove a task from some but not all of its flows, it will still exist
+in the remaining flows, but it will not affect the evolution of the removed
+flows.
 
 Removing a submitted or running task will also kill it (see "cylc kill").
 
