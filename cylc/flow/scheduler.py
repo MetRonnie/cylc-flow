@@ -1114,7 +1114,7 @@ class Scheduler:
                 ):
                     # Unset any prereqs naturally satisfied by these tasks
                     # (do not unset those satisfied by `cylc set --pre`):
-                    if prereq.unset_naturally_satisfied_dependency(id_):
+                    if prereq.unset_naturally_satisfied_conditions(id_):
                         prereqs_changed = True
                         removed.setdefault(id_, set()).update(fnums_to_remove)
                 if not prereqs_changed:
@@ -1134,7 +1134,7 @@ class Scheduler:
                 if (
                     # Ignoring tasks we are already dealing with:
                     child_itask.identity in matched_task_ids
-                    or child_itask.state.any_satisfied_prerequisite_tasks()
+                    or child_itask.state.any_satisfied_prerequisite_outputs()
                 ):
                     continue
                 # No longer has reason to be in pool:
