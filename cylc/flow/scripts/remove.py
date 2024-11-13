@@ -32,10 +32,14 @@ flows.
 
 Removing a submitted or running task will also kill it (see "cylc kill").
 
+This command can also be used to remove final-status incomplete tasks from
+the n=0 active window, to prevent/recover from a stall, if they don't
+need to be completed to continue the flow.
+
 Examples:
   # Remove a task that already ran.
   # (Any downstream tasks that are already running or finished will be
-  # left alone. The task and its outputs will be left in the None flow)
+  # left alone. The task and its outputs will be left in the None flow.)
   $ cylc remove <id>
 
   # Remove a task from a specified flow.

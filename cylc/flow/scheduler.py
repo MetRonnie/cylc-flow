@@ -1088,6 +1088,7 @@ class Scheduler:
                 itask.removed = True
             itask.flow_nums.difference_update(fnums_to_remove)
 
+        # All the matched tasks (including inactive & applicable active tasks):
         matched_task_ids = {
             *removed.keys(),
             *(quick_relative_id(cycle, task) for task, cycle in inactive),
@@ -1096,8 +1097,9 @@ class Scheduler:
         for id_ in matched_task_ids:
             point_str, name = id_.split('/', 1)
             tdef = self.config.taskdefs[name]
-            # Go through downstream tasks to see if any need to stand down
-            # as a result of this task being removed:
+
+            # Go through any tasks downstream of this matched task to see if
+            # any need to stand down as a result of this task being removed:
             for child in set(itertools.chain.from_iterable(
                 generate_graph_children(tdef, get_point(point_str)).values()
             )):
