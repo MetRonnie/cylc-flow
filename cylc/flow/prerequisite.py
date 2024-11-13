@@ -50,7 +50,7 @@ AnyPrereqTuple = Tuple[Union['PointBase', str, int], str, str]
 
 
 class PrereqTuple(NamedTuple):
-    """A condition in a Prerequisite."""
+    """A task output in a Prerequisite."""
     point: str
     task: str
     output: str
@@ -85,8 +85,8 @@ class Prerequisite:
     A single TaskProxy can have multiple Prerequisites, all of which require
     satisfying. This corresponds to multiple graph arrow dependencies
     (e.g. `a => c`, `b => c`). But a single Prerequisite object
-    can also have multiple dependencies/conditions from operator-joined
-    left-hand sides in the graph (e.g. `a & (b | c) => d`).
+    can also have multiple dependencies from operator-joined left-hand side
+    expressions in the graph (e.g. `a & (b | c) => d`).
     """
 
     # Memory optimization - constrain possible attributes to this list.
@@ -106,7 +106,7 @@ class Prerequisite:
         # cylc.flow.cycling.PointBase
         self.point = point
 
-        # Dictionary of conditions pertaining to this prerequisite
+        # Dictionary of task outputs pertaining to this prerequisite
         # (i.e. all the outputs on the LHS of the graph arrow).
         # {('point string', 'task name', 'output'): DEP_STATE_X, ...}
         self._satisfied: Dict[PrereqTuple, SatisfiedState] = {}
@@ -179,9 +179,9 @@ class Prerequisite:
         expr = self.conditional_expression
         if not expr:
             return None
-        for condition in self._satisfied:
-            expr = expr.replace(self.SATISFIED_TEMPLATE % condition,
-                                self.MESSAGE_TEMPLATE % condition)
+        for task_output in self._satisfied:
+            expr = expr.replace(self.SATISFIED_TEMPLATE % task_output,
+                                self.MESSAGE_TEMPLATE % task_output)
         return expr
 
     def set_conditional_expr(self, expr):
@@ -205,12 +205,12 @@ class Prerequisite:
         self._cached_satisfied = None
         if '|' in expr:
             # Make a Python expression so we can eval() the logic.
-            for condition in self._satisfied:
+            for t_output in self._satisfied:
                 # Use '\b' in case one task name is a substring of another
                 # and escape special chars ('.', timezone '+') in task IDs.
                 expr = re.sub(
-                    fr"\b{re.escape(self.MESSAGE_TEMPLATE % condition)}\b",
-                    self.SATISFIED_TEMPLATE % condition,
+                    fr"\b{re.escape(self.MESSAGE_TEMPLATE % t_output)}\b",
+                    self.SATISFIED_TEMPLATE % t_output,
                     expr
                 )
 
@@ -268,14 +268,14 @@ class Prerequisite:
         """
         valid = set()
         for output in outputs:
-            condition = PrereqTuple(
+            output_tuple = PrereqTuple(
                 output['cycle'], output['task'], output['task_sel']
             )
-            if condition not in self._satisfied:
+            if output_tuple not in self._satisfied:
                 continue
             valid.add(output)
-            if self._satisfied[condition] != 'satisfied naturally':
-                self[condition] = (
+            if self._satisfied[output_tuple] != 'satisfied naturally':
+                self[output_tuple] = (
                     'force satisfied' if forced else 'satisfied naturally'
                 )
         return valid
@@ -290,21 +290,21 @@ class Prerequisite:
             ).replace('|', ' | ').replace('&', ' & ')
         else:
             expr = ' & '.join(
-                self.MESSAGE_TEMPLATE % condition
-                for condition in self._satisfied
+                self.MESSAGE_TEMPLATE % task_output
+                for task_output in self._satisfied
             )
         conds = []
         num_length = len(str(len(self._satisfied)))
-        for ind, condition_tuple in enumerate(sorted(self._satisfied)):
-            t_id = condition_tuple.get_id()
+        for ind, output_tuple in enumerate(sorted(self._satisfied)):
+            t_id = output_tuple.get_id()
             char = str(ind).zfill(num_length)
-            c_msg = self.MESSAGE_TEMPLATE % condition_tuple
-            c_val = self._satisfied[condition_tuple]
+            c_msg = self.MESSAGE_TEMPLATE % output_tuple
+            c_val = self._satisfied[output_tuple]
             conds.append(
                 PbCondition(
                     task_proxy=t_id,
                     expr_alias=char,
-                    req_state=condition_tuple.output,
+                    req_state=output_tuple.output,
                     satisfied=bool(c_val),
                     message=(c_val or 'unsatisfied'),
                 )
@@ -323,9 +323,9 @@ class Prerequisite:
         State can be overridden by calling `self.satisfy_me`.
 
         """
-        for condition in self._satisfied:
-            if not self._satisfied[condition]:
-                self._satisfied[condition] = 'force satisfied'
+        for task_output in self._satisfied:
+            if not self._satisfied[task_output]:
+                self._satisfied[task_output] = 'force satisfied'
         if self.conditional_expression:
             self._cached_satisfied = self._eval_satisfied()
         else:
@@ -333,7 +333,7 @@ class Prerequisite:
 
     def iter_target_point_strings(self):
         yield from {
-            condition.point for condition in self._satisfied
+            task_output.point for task_output in self._satisfied
         }
 
     def get_target_points(self):
@@ -343,15 +343,15 @@ class Prerequisite:
             get_point(p) for p in self.iter_target_point_strings()
         ]
 
-    def unset_naturally_satisfied_conditions(self, id_: str) -> bool:
+    def unset_naturally_satisfied(self, id_: str) -> bool:
         """Set the dependencies with matching task IDs to unsatisfied only if
         they were naturally satisfied.
 
         Returns True if any dependencies were changed.
         """
         changed = False
-        for condition, sat in self._satisfied.items():
-            if condition.get_id() == id_ and sat and sat != 'force satisfied':
-                self[condition] = False
+        for t_output, sat in self._satisfied.items():
+            if t_output.get_id() == id_ and sat and sat != 'force satisfied':
+                self[t_output] = False
                 changed = True
         return changed

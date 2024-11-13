@@ -154,9 +154,7 @@ def satisfied_states_prereq():
     return prereq
 
 
-def test_unset_naturally_satisfied_conditions(
-    satisfied_states_prereq: Prerequisite
-):
+def test_unset_naturally_satisfied(satisfied_states_prereq: Prerequisite):
     satisfied_states_prereq[('1', 'a', 'y')] = True
     satisfied_states_prereq[('1', 'a', 'z')] = 'force satisfied'
     for id_, expected in [
@@ -166,8 +164,7 @@ def test_unset_naturally_satisfied_conditions(
         ('1/d', False),
     ]:
         assert (
-            satisfied_states_prereq.unset_naturally_satisfied_conditions(id_)
-            == expected
+            satisfied_states_prereq.unset_naturally_satisfied(id_) == expected
         )
     assert satisfied_states_prereq._satisfied == {
         ('1', 'a', 'x'): False,

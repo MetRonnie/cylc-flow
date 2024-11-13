@@ -1116,7 +1116,7 @@ class Scheduler:
                 ):
                     # Unset any prereqs naturally satisfied by these tasks
                     # (do not unset those satisfied by `cylc set --pre`):
-                    if prereq.unset_naturally_satisfied_conditions(id_):
+                    if prereq.unset_naturally_satisfied(id_):
                         prereqs_changed = True
                         removed.setdefault(id_, set()).update(fnums_to_remove)
                 if not prereqs_changed:
