@@ -18,7 +18,14 @@
 
 """cylc remove [OPTIONS] ARGS
 
-Erase the run-history of tasks, allowing them to run again in the same flow.
+Remove active tasks or erase the run-history of past tasks.
+
+Final-status incomplete tasks can be removed from the n=0 active window to
+prevent/recover from a stall, if they don't need to be completed to continue
+the flow.
+
+Erasing the run-history of past tasks allows them to be run again in the
+same flow (this is an alternative to starting a new flow).
 
 By default, the specified task(s) will be removed from all flows.
 
@@ -31,10 +38,6 @@ in the remaining flows, but it will not affect the evolution of the removed
 flows.
 
 Removing a submitted or running task will also kill it (see "cylc kill").
-
-This command can also be used to remove final-status incomplete tasks from
-the n=0 active window, to prevent/recover from a stall, if they don't
-need to be completed to continue the flow.
 
 Examples:
   # Remove a task that already ran.
