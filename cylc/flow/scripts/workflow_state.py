@@ -42,8 +42,8 @@ Legacy (pre-8.3.0) options are supported, but deprecated, for existing scripts:
 
 In "cycle/task:selector" the selector will match task statuses, unless:
   - with --triggers, it will only match task output triggers.
-  - with --messages, it will only match task output messages. DEPRECATED
-    use triggers instead - they match manually and naturally set outputs.
+  - with --messages, it will only match task output messages. It is recommended
+    to use triggers instead - they match manually and naturally set outputs.
 
 Selector does not default to "succeeded". If omitted, any status will match.
 
