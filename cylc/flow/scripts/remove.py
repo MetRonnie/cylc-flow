@@ -18,7 +18,7 @@
 
 """cylc remove [OPTIONS] ARGS
 
-Remove active tasks or erase the run-history of past tasks.
+Remove tasks in the active window, or erase the run-history of past tasks.
 
 Final-status incomplete tasks can be removed from the n=0 active window to
 prevent/recover from a stall, if they don't need to be completed to continue

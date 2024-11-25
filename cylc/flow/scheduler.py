@@ -1052,7 +1052,7 @@ class Scheduler:
     def remove_tasks(
         self, items: Iterable[str], flow_nums: Optional['FlowNums'] = None
     ) -> None:
-        """Remove tasks from the task pool (by command).
+        """Remove tasks (`cylc remove` command).
 
         Args:
             items: Relative IDs or globs.
