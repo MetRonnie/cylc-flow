@@ -1154,7 +1154,8 @@ class Scheduler:
             if db_removed_fnums:
                 removed.setdefault(id_, set()).update(db_removed_fnums)
 
-        self.kill_tasks(to_kill, warn=False)
+        if to_kill:
+            self.kill_tasks(to_kill, warn=False)
 
         if removed:
             tasks_str_list = []
