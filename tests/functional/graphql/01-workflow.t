@@ -50,10 +50,6 @@ query {
     nEdgeDistance
     stateTotals
     workflowLogDir
-    timeZoneInfo {
-      hours
-      minutes
-    }
     nsDefOrder
     states
     latestStateTasks (states: [\"waiting\"])
@@ -109,10 +105,6 @@ cmp_json "${TEST_NAME}-out" "${TEST_NAME_BASE}-workflows.stdout" << __HERE__
                 "succeeded": 0
             },
             "workflowLogDir": "${WORKFLOW_LOG_DIR}",
-            "timeZoneInfo": {
-                "hours": 0,
-                "minutes": 0
-            },
             "nsDefOrder": [
                 "foo",
                 "root"

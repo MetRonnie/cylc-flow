@@ -16,11 +16,12 @@
 """Wall clock related utilities."""
 
 from calendar import timegm
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Tuple
-
-from metomi.isodatetime.timezone import (
-    get_local_time_zone_format, get_local_time_zone, TimeZoneFormatMode)
+from datetime import (
+    datetime,
+    timedelta,
+    timezone,
+)
+from typing import Optional
 
 
 DATE_TIME_FORMAT_BASIC = "%Y%m%dT%H%M%S"
@@ -40,22 +41,6 @@ TIME_FORMAT_EXTENDED_SUB_SECOND = "%H:%M:%S.%f"
 
 TIME_ZONE_STRING_UTC = "Z"
 
-TIME_ZONE_LOCAL_INFO = {
-    "hours": get_local_time_zone()[0],
-    "minutes": get_local_time_zone()[1],
-    "string_basic": get_local_time_zone_format(
-        TimeZoneFormatMode.reduced),
-    "string_extended": get_local_time_zone_format(
-        TimeZoneFormatMode.extended)
-}
-
-TIME_ZONE_UTC_INFO = {
-    "hours": 0,
-    "minutes": 0,
-    "string_basic": TIME_ZONE_STRING_UTC,
-    "string_extended": TIME_ZONE_STRING_UTC
-}
-
 PARSER = None
 
 
@@ -69,7 +54,7 @@ def set_utc_mode(mode):
     _FLAGS['utc_mode'] = bool(mode)
 
 
-def now(override_use_utc: Optional[bool] = None) -> Tuple[datetime, bool]:
+def now(override_use_utc: Optional[bool] = None) -> datetime:
     """Return a current-time, timezone-aware datetime.datetime and a flag
     indicating whether it is UTC or not.
 
@@ -81,13 +66,15 @@ def now(override_use_utc: Optional[bool] = None) -> Tuple[datetime, bool]:
 
     """
     if override_use_utc or (override_use_utc is None and _FLAGS['utc_mode']):
-        return datetime.now(timezone.utc), False
-    else:
-        return datetime.now().astimezone(), True
+        return datetime.now(timezone.utc)
+    return datetime.now().astimezone()
 
 
-def get_current_time_string(display_sub_seconds=False, override_use_utc=None,
-                            use_basic_format=False):
+def get_current_time_string(
+    display_sub_seconds: bool = False,
+    override_use_utc: Optional[bool] = None,
+    use_basic_format: bool = False,
+):
     """Return a string representing the current system time.
 
     Keyword arguments:
@@ -102,57 +89,33 @@ def get_current_time_string(display_sub_seconds=False, override_use_utc=None,
     most useful for filenames where ":" may cause problems.
 
     """
-    date_time, date_time_is_local = now(override_use_utc=override_use_utc)
-    return get_time_string(date_time, display_sub_seconds=display_sub_seconds,
-                           override_use_utc=override_use_utc,
-                           date_time_is_local=date_time_is_local,
-                           use_basic_format=use_basic_format)
+    date_time = now(override_use_utc=override_use_utc)
+    return get_time_string(
+        date_time,
+        display_sub_seconds=display_sub_seconds,
+        use_basic_format=use_basic_format,
+    )
 
 
 def get_time_string(
     date_time: datetime,
     display_sub_seconds: bool = False,
-    override_use_utc: Optional[bool] = None,
     use_basic_format: bool = False,
-    date_time_is_local: bool = False,
 ):
     """Return a string representing the current system time.
 
     Arguments:
-    date_time - a datetime.datetime object.
+    date_time - a timezone-aware datetime.datetime object.
 
     Keyword arguments:
     display_sub_seconds (default False) - a boolean that, if True,
     switches on microsecond reporting
-    override_use_utc (default None) - a boolean (or None) that, if
-    True, switches on utc time zone reporting. If False, it switches
-    off utc time zone reporting (even if _FLAGS['utc_mode'] is True). If None,
-    the _FLAGS['utc_mode'] boolean is used.
     use_basic_format (default False) - a boolean that, if True,
     represents the date/time without "-" or ":" delimiters. This is
     most useful for filenames where ":" may cause problems.
-    date_time_is_local - a boolean that, if True, indicates that
-    the date_time argument object is in the local time zone, not UTC.
 
     """
-    local_tz = get_local_time_zone()
-    if override_use_utc or (override_use_utc is None and _FLAGS['utc_mode']):
-        time_zone_string = TIME_ZONE_STRING_UTC
-        if date_time_is_local:
-            date_time = date_time - timedelta(
-                hours=local_tz[0], minutes=local_tz[1]
-            )
-    else:
-        if use_basic_format:
-            time_zone_string = get_local_time_zone_format(
-                TimeZoneFormatMode.reduced)
-        else:
-            time_zone_string = get_local_time_zone_format(
-                TimeZoneFormatMode.extended)
-        if not date_time_is_local:
-            diff_hours, diff_minutes = local_tz
-            date_time = date_time + timedelta(
-                hours=diff_hours, minutes=diff_minutes)
+    time_zone_string = date_time.strftime('%z')[:5]  # truncate secs
     if use_basic_format:
         date_time_format_string = DATE_TIME_FORMAT_BASIC
         if display_sub_seconds:
@@ -161,7 +124,14 @@ def get_time_string(
         date_time_format_string = DATE_TIME_FORMAT_EXTENDED
         if display_sub_seconds:
             date_time_format_string = DATE_TIME_FORMAT_EXTENDED_SUB_SECOND
+        # TODO: when dropping support for Python 3.11, can just do
+        # time_zone_string = date_time.strftime('%:z')[:6]
+        time_zone_string = "{0}:{1}".format(
+            time_zone_string[:3], time_zone_string[3:]
+        )
     date_time_string = date_time.strftime(date_time_format_string)
+    if date_time.tzinfo is timezone.utc:
+        time_zone_string = TIME_ZONE_STRING_UTC
     return date_time_string + time_zone_string
 
 
@@ -185,15 +155,13 @@ def get_time_string_from_unix_time(
 
     """
     return get_time_string(
-        datetime.fromtimestamp(unix_time, timezone.utc),
+        datetime.fromtimestamp(unix_time).astimezone(),
         display_sub_seconds=display_sub_seconds,
         use_basic_format=use_basic_format,
-        override_use_utc=None,
-        date_time_is_local=False,
     )
 
 
-def get_unix_time_from_time_string(datetime_string):
+def get_unix_time_from_time_string(datetime_string: str) -> int:
     """Convert a datetime string into a unix timestamp.
 
     The datetime_string must match DATE_TIME_FORMAT_EXTENDED above,
@@ -207,7 +175,8 @@ def get_unix_time_from_time_string(datetime_string):
     """
     try:
         date_time_utc = datetime.strptime(
-            datetime_string, DATE_TIME_FORMAT_EXTENDED + "Z")
+            datetime_string, DATE_TIME_FORMAT_EXTENDED + TIME_ZONE_STRING_UTC
+        )
     except ValueError:
         global PARSER
         if PARSER is None:
@@ -227,7 +196,7 @@ def get_unix_time_from_time_string(datetime_string):
     return timegm(date_time_utc.timetuple())
 
 
-def get_seconds_as_interval_string(seconds):
+def get_seconds_as_interval_string(seconds: float) -> str:
     """Convert a number of seconds into an ISO 8601 duration string."""
     from metomi.isodatetime.data import Duration
     return str(Duration(seconds=seconds, standardize=True))

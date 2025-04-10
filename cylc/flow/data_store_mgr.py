@@ -107,11 +107,6 @@ from cylc.flow.util import (
     serialise_set,
     deserialise_set
 )
-from cylc.flow.wallclock import (
-    TIME_ZONE_LOCAL_INFO,
-    TIME_ZONE_UTC_INFO,
-    get_utc_mode
-)
 
 if TYPE_CHECKING:
     from cylc.flow.cycling import PointBase
@@ -695,12 +690,6 @@ class DataStoreMgr:
             for val in config.get_first_parent_ancestors(pruned=True).values()
         ]) - 1
 
-        if get_utc_mode():
-            time_zone_info = TIME_ZONE_UTC_INFO
-        else:
-            time_zone_info = TIME_ZONE_LOCAL_INFO
-        for key, val in time_zone_info.items():
-            setbuff(workflow.time_zone_info, key, val)
         workflow.run_mode = RunMode.get(config.options).value
         workflow.cycling_mode = config.cfg['scheduling']['cycling mode']
         workflow.workflow_log_dir = self.schd.workflow_log_dir

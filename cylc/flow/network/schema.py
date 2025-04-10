@@ -783,8 +783,13 @@ class Workflow(ObjectType):
         description="The path to the workflow's run directory.",
     )
     time_zone_info = Field(
+        # TODO: remove
         TimeZone,
-        description='The scheduler time zone.',
+        description="The local time zone at scheduler start-up.",
+        deprecation_reason=(
+            "This information is no longer provided. "
+            "There should be no reason to use this."
+        )
     )
     tree_depth = Int()  # TODO: what is this? write description
     ns_def_order = graphene.List(
@@ -799,7 +804,9 @@ class Workflow(ObjectType):
     job_log_names = graphene.List(
         # TODO: remove, see https://github.com/cylc/cylc-flow/issues/5610
         String,
-        description='Deprecated, do not use this.',
+        deprecation_reason=(
+            "The extra log files configuration is no longer used."
+        ),
     )
     states = graphene.List(
         String,

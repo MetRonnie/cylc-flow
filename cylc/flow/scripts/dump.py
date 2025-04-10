@@ -101,12 +101,6 @@ fragment wFlow on Workflow {
   name
   oldestActiveCyclePoint
   newestActiveCyclePoint
-  timeZoneInfo {
-    hours
-    minutes
-    stringBasic
-    stringExtended
-  }
   lastUpdated
   runMode
   states

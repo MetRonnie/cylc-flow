@@ -55,18 +55,12 @@ message PbMeta {
     optional string user_defined = 4;
 }
 
-message PbTimeZone {
-    optional int32 hours = 1;
-    optional int32 minutes = 2;
-    optional string string_basic = 3;
-    optional string string_extended = 4;
-}
-
 message PbTaskProxyRefs {
     repeated string task_proxies = 1;
 }
 
 message PbWorkflow {
+    reserved 23;
     optional string stamp = 1;
     optional string id = 2;
     optional string name = 3;
@@ -88,7 +82,6 @@ message PbWorkflow {
     optional string cycling_mode = 20;
     map<string, int32> state_totals = 21;
     optional string workflow_log_dir = 22;
-    optional PbTimeZone time_zone_info = 23;
     optional int32 tree_depth = 24;
     repeated string job_log_names = 25;
     repeated string ns_def_order = 26;
