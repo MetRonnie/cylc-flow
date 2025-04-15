@@ -208,10 +208,12 @@ def capcall(monkeypatch):
 @pytest.fixture
 def set_nonexistent_timezone(monkeypatch):
     """Fixture to temporarily set a non-existent time zone."""
-    try:
+    def patch():
         with monkeypatch.context() as mp:
             mp.setenv('TZ', 'XXX-19:17')  # Set to a non-existent time zone
             time.tzset()
-            yield
+
+    try:
+        yield patch
     finally:
         time.tzset()  # Reset to the original time zone after the test

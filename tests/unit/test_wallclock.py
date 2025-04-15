@@ -70,5 +70,6 @@ def test_get_current_time_string(set_nonexistent_timezone):
 
     https://github.com/cylc/cylc-flow/issues/6701
     """
+    set_nonexistent_timezone()
     res = get_current_time_string()
     assert res[-6:] == '+19:17'

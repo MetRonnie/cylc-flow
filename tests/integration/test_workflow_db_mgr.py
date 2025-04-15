@@ -17,6 +17,7 @@
 from datetime import datetime, timedelta
 import pytest
 import sqlite3
+import time
 from typing import TYPE_CHECKING
 
 from cylc.flow import commands
@@ -185,10 +186,9 @@ async def test_time_zone_writing(
     one_conf,
     flow,
     scheduler,
-    run,
-    complete,
-    set_nonexistent_timezone,
+    start,
     db_select,
+    set_nonexistent_timezone
 ):
     """Don't store scheduler startup timezone forever.
 
@@ -196,8 +196,11 @@ async def test_time_zone_writing(
     """
     wid = flow(one_conf)
     schd = scheduler(wid, paused_start=False, run_mode='live')
-    async with run(schd):
-        await complete(schd, timeout=20)
+    async with start(schd):
+        itask = schd.pool.get_tasks()[0]
+        schd.submit_task_jobs([itask])
+        set_nonexistent_timezone()
+        schd.task_events_mgr.process_message(itask, 'INFO', 'submitted')
 
     # Check the db time_submit (defective) against time_submit_exit
     # which was ok:
