@@ -17,7 +17,6 @@
 from datetime import datetime, timedelta
 import pytest
 import sqlite3
-import time
 from typing import TYPE_CHECKING
 
 from cylc.flow import commands
