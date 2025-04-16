@@ -131,7 +131,7 @@ def get_time_string(
                 time_zone_string[:3], time_zone_string[3:]
             )
     date_time_string = date_time.strftime(date_time_format_string)
-    if date_time.tzinfo is timezone.utc:
+    if date_time.tzinfo == timezone.utc:
         time_zone_string = TIME_ZONE_STRING_UTC
     return date_time_string + time_zone_string
 
