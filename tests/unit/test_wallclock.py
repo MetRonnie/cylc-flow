@@ -72,28 +72,16 @@ def test_get_unix_time_from_time_string_error(value, error):
         get_unix_time_from_time_string(value)
 
 
-@pytest.mark.parametrize('tz_info', [
-    pytest.param(None, id="naive"),
-    pytest.param(timezone.utc, id="utc-tz-aware"),
-    pytest.param(timezone(timedelta(hours=5)), id="custom-tz-aware"),
+@pytest.mark.parametrize('tz_info, expected_tz', [
+    pytest.param(None, '', id="naive"),
+    pytest.param(timezone.utc, 'Z', id="utc-tz-aware"),
+    pytest.param(timezone(timedelta(hours=5)), '+05:00', id="custom-tz-aware"),
 ])
-def test_get_time_string_tzinfo(tz_info, monkeypatch: pytest.MonkeyPatch):
-    """Basic check it handles naive and timezone-aware datetime objects.
-
-    Currently we just ignore the timezone information in the datetime object.
-    """
-    # Mock UTC time zone:
-    monkeypatch.setattr(
-        'cylc.flow.wallclock.TIME_ZONE_LOCAL_UTC_OFFSET', (0, 0)
-    )
-    for fmt in ('BASIC', 'EXTENDED'):
-        monkeypatch.setattr(
-            f'cylc.flow.wallclock.TIME_ZONE_STRING_LOCAL_{fmt}', 'Z'
-        )
-
+def test_get_time_string_tzinfo(tz_info, expected_tz):
+    """Basic check it handles naive and timezone-aware datetime objects."""
     assert get_time_string(
         datetime(2077, 2, 8, 13, 42, 39, 123456, tz_info)
-    ) == '2077-02-08T13:42:39Z'
+    ) == f'2077-02-08T13:42:39{expected_tz}'
 
 
 def test_get_current_time_string(set_nonexistent_timezone):

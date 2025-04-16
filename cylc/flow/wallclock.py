@@ -126,9 +126,10 @@ def get_time_string(
             date_time_format_string = DATE_TIME_FORMAT_EXTENDED_SUB_SECOND
         # TODO: when dropping support for Python 3.11, can just do
         # time_zone_string = date_time.strftime('%:z')[:6]
-        time_zone_string = "{0}:{1}".format(
-            time_zone_string[:3], time_zone_string[3:]
-        )
+        if time_zone_string:
+            time_zone_string = "{0}:{1}".format(
+                time_zone_string[:3], time_zone_string[3:]
+            )
     date_time_string = date_time.strftime(date_time_format_string)
     if date_time.tzinfo is timezone.utc:
         time_zone_string = TIME_ZONE_STRING_UTC
