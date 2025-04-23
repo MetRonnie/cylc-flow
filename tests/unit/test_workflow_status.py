@@ -14,12 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
-from metomi.isodatetime.data import TimePoint
 
 from cylc.flow.cycling.integer import IntegerPoint
+from cylc.flow.wallclock import get_time_string
 from cylc.flow.workflow_status import (
     WORKFLOW_STATUS_RUNNING_TO_HOLD,
     WORKFLOW_STATUS_RUNNING_TO_STOP,
@@ -29,7 +30,8 @@ from cylc.flow.workflow_status import (
     get_workflow_status_msg,
 )
 
-STOP_TIME = TimePoint(year=2006).to_local_time_zone()
+
+STOP_TIME = datetime(2006, 1, 1).astimezone()
 
 
 def schd(
@@ -89,9 +91,9 @@ def schd(
             WORKFLOW_STATUS_RUNNING_TO_STOP % 4
         ),
         (
-            {'stop_clock_time': int(STOP_TIME.seconds_since_unix_epoch)},
+            {'stop_clock_time': int(STOP_TIME.timestamp())},
             WorkflowStatus.RUNNING,
-            WORKFLOW_STATUS_RUNNING_TO_STOP % str(STOP_TIME)
+            WORKFLOW_STATUS_RUNNING_TO_STOP % get_time_string(STOP_TIME)
         ),
         (
             {'stop_task_id': '6/foo'},

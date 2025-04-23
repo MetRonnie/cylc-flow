@@ -16,7 +16,6 @@
 
 """Manage flow counter and flow metadata."""
 
-import datetime
 from typing import (
     TYPE_CHECKING,
     Dict,
@@ -27,6 +26,7 @@ from typing import (
 )
 
 from cylc.flow import LOG
+from cylc.flow.wallclock import now
 
 
 if TYPE_CHECKING:
@@ -126,13 +126,11 @@ class FlowMgr:
     def __init__(
         self,
         db_mgr: "WorkflowDatabaseManager",
-        utc: bool = True
     ) -> None:
         """Initialise the flow manager."""
         self.db_mgr = db_mgr
         self.flows: Dict[int, Dict[str, str]] = {}
         self.counter: int = 0
-        self._timezone = datetime.timezone.utc if utc else None
 
     def get_flow_num(
         self,
@@ -166,16 +164,14 @@ class FlowMgr:
                 )
         else:
             # Record a new flow.
-            now_sec = datetime.datetime.now(tz=self._timezone).isoformat(
-                timespec="seconds"
-            )
+            timestamp = now().isoformat(timespec="seconds")
             meta = meta or "no description"
             self.flows[flow_num] = {
                 "description": meta,
-                "start_time": now_sec
+                "start_time": timestamp
             }
             LOG.info(
-                f"New flow: {flow_num} ({meta}) {now_sec}"
+                f"New flow: {flow_num} ({meta}) {timestamp}"
             )
             self.db_mgr.put_insert_workflow_flows(
                 flow_num,

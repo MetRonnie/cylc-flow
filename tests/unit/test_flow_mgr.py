@@ -16,28 +16,23 @@
 
 """Unit tests for FlowManager."""
 
-import pytest
 import datetime
 import logging
 
+import pytest
+
+from cylc.flow import CYLC_LOG
 from cylc.flow.flow_mgr import FlowMgr
 from cylc.flow.workflow_db_mgr import WorkflowDatabaseManager
-from cylc.flow import CYLC_LOG
 
 
-FAKE_NOW = datetime.datetime(2020, 12, 25, 17, 5, 55)
+FAKE_NOW = datetime.datetime(2020, 12, 25, 17, 5, 55).astimezone()
 FAKE_NOW_ISO = FAKE_NOW.isoformat()
 
 
 @pytest.fixture
-def patch_datetime_now(monkeypatch):
-
-    class mydatetime:
-        @classmethod
-        def now(cls, tz=None):
-            return FAKE_NOW
-
-    monkeypatch.setattr(datetime, 'datetime', mydatetime)
+def patch_datetime_now(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr('cylc.flow.flow_mgr.now', lambda *a, **k: FAKE_NOW)
 
 
 def test_all(

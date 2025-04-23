@@ -495,7 +495,7 @@ class Scheduler:
             self.options.cycle_point_tz = (
                 self.config.cfg['scheduler']['cycle point time zone'])
 
-        self.flow_mgr = FlowMgr(self.workflow_db_mgr, self.options.utc_mode)
+        self.flow_mgr = FlowMgr(self.workflow_db_mgr)
 
         # Note that daemonization happens after this:
         self.log_start()
