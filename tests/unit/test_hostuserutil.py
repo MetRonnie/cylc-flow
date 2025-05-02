@@ -22,6 +22,7 @@ import pytest
 from cylc.flow.hostuserutil import (
     get_fqdn_by_host,
     get_host,
+    get_host_ip_by_name,
     get_user,
     get_user_home,
     is_remote_host,
@@ -35,13 +36,21 @@ def test_is_remote_user_on_current_user():
     assert not is_remote_user(os.getenv('USER'))
 
 
-def test_is_remote_host_on_localhost(monkeypatch):
+@pytest.mark.parametrize(
+    'host',
+    [
+        None,
+        'localhost',
+        'localhost4.localhost42',
+        pytest.param(os.getenv('HOSTNAME'), id="HOSTNAME-env-var"),
+        pytest.param(get_host(), id="get_host()"),
+        pytest.param(get_host_ip_by_name('localhost'), id="localhost-ip"),
+        pytest.param(get_host_ip_by_name(get_host()), id="get_host-ip"),
+    ],
+)
+def test_is_remote_host_on_localhost(host):
     """is_remote_host with localhost."""
-    assert not is_remote_host(None)
-    assert not is_remote_host('localhost')
-    assert not is_remote_host('localhost4.localhost42')
-    assert not is_remote_host(os.getenv('HOSTNAME'))
-    assert not is_remote_host(get_host())
+    assert not is_remote_host(host)
 
 
 def test_get_fqdn_by_host_on_bad_host():

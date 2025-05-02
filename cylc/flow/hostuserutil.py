@@ -190,26 +190,39 @@ class HostUtil:
             self.remote_users.update(((self.user_pwent.pw_name, False),))
         return self.user_pwent
 
-    def is_remote_host(self, name):
-        """Return True if name has different IP address than the current host.
+    def is_remote_host(self, host: Optional[str]) -> bool:
+        """Return True if the host is not the current host.
+
+        If the given host's primary name does not match the current host's or
+        'localhost', and none of the given host's IP addresses (if any) overlap
+        with the current host's or 127.0.0.1, the host is considered remote.
+
+        Args:
+            host: Either a host name or an IP address.
 
         Return False if name is None.
         Return True if host is unknown.
 
         """
-        if name not in self._remote_hosts:
-            if not name or name.startswith("localhost"):
+        if host not in self._remote_hosts:
+            if not host or host.startswith("localhost"):
                 # e.g. localhost4.localdomain4
-                self._remote_hosts[name] = False
+                self._remote_hosts[host] = False
             else:
                 try:
-                    host_info = self._get_host_info(name)
+                    host_name, _, host_ip = self._get_host_info(host)
                 except IOError:
-                    self._remote_hosts[name] = True
+                    self._remote_hosts[host] = True
                 else:
-                    self._remote_hosts[name] = (
-                        host_info != self._get_host_info())
-        return self._remote_hosts[name]
+                    this_name, _, this_ip = self._get_host_info()
+                    # (^ This is normally the FQDN and network-accessible IP)
+                    _, _, localhost_ip = self._get_host_info('localhost')
+                    # (^ This is normally 127.0.0.1)
+                    self._remote_hosts[host] = (
+                        host_name not in {this_name, 'localhost'} and
+                        set(host_ip).isdisjoint({*this_ip, *localhost_ip})
+                    )
+        return self._remote_hosts[host]
 
     def is_remote_user(self, name):
         """Return True if name is not a name of the current user.
@@ -281,9 +294,9 @@ def is_remote_platform(platform):
     return HostUtil.get_inst()._is_remote_platform(platform)
 
 
-def is_remote_host(name):
+def is_remote_host(host: Optional[str]) -> bool:
     """Shorthand for HostUtil.get_inst().is_remote_host(name)."""
-    return HostUtil.get_inst().is_remote_host(name)
+    return HostUtil.get_inst().is_remote_host(host)
 
 
 def is_remote_user(name):
