@@ -26,15 +26,8 @@ jobs:
     strategy:
       fail-fast: false # don't stop on first failure
       matrix:
-        os: ['ubuntu-latest']
-        python-version: ['3.7', '3.8', '3.10', '3.11', '3.12', '3']
-        include:
-          - os: 'macos-latest'
-            python-version: '3.8'  # oldest version with arm64 builds
-          # non-utc timezone test
-          - os: 'ubuntu-latest'
-            python-version: '3.9'  # not the oldest, not the most recent version
-            time-zone: 'XXX-09:35'
+        os: ['macos-latest']
+        python-version: ['3.8', '3']
     env:
       TZ: ${{ matrix.time-zone }}
       PYTEST_ADDOPTS: --cov --cov-append -n 5 --color=yes
@@ -59,113 +52,45 @@ jobs:
         run: |
           pip install -e ."[all]"
 
-      - name: Patch DNS
-        uses: cylc/release-actions/patch-dns@v1
-
       - name: Configure git  # Needed by the odd test
         uses: cylc/release-actions/configure-git@v1
 
-      - name: Unit Tests
-        timeout-minutes: 5
+      - run: cat /etc/hosts
+
+      - name: Muldoon
+        shell: /Users/runner/micromamba/envs/cylc-fast-test/bin/python {0}
+        continue-on-error: true
         run: |
-          pytest cylc/flow tests/unit
+          import socket
+          print(socket.gethostname())
+          print("OK")
+          print(socket.getfqdn('localhost'))
 
-      - name: Integration Tests
-        timeout-minutes: 5
+      - name: Nedry
+        shell: /Users/runner/micromamba/envs/cylc-fast-test/bin/python {0}
+        continue-on-error: true
         run: |
-          pytest tests/integration --ignore tests/integration/tui/
+          import socket
+          print(socket.gethostbyname_ex(socket.gethostname()))
+          print("OK")
+          print(socket.gethostbyname_ex("localhost"))
+          print("OK")
+          print(socket.gethostbyname_ex(socket.getfqdn('localhost')))
 
-      - name: Tui Integration Tests
-        timeout-minutes: 5
-        # Re-run failed Tui tests as they can be flaky
+      - name: Dodgson
+        shell: /Users/runner/micromamba/envs/cylc-fast-test/bin/python {0}
+        continue-on-error: true
         run: |
-          pytest tests/integration/tui || pytest tests/integration/tui --last-failed
+          import socket
+          print(socket.gethostbyaddr('127.0.0.1'))
+          print("OK")
+          print(socket.gethostbyaddr('localhost'))
 
-      - name: Upload failed tests artifact
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cylc-run (${{ matrix.os }} py-${{ matrix.python-version }})
-          path: ~/cylc-run/
-          include-hidden-files: true
+      - continue-on-error: true
+        run: pytest tests/unit/test_host_select.py
 
-      - name: Coverage report
-        run: |
-          coverage xml
-          coverage report
+      - continue-on-error: true
+        run: pytest tests/unit/test_host_select_remote.py
 
-      - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage_${{ matrix.os }}_py-${{ matrix.python-version }}
-          path: coverage.xml
-          retention-days: 7
-
-  lint:
-    runs-on: 'ubuntu-latest'
-    timeout-minutes: 10
-    strategy:
-      matrix:
-        python-version: ['3']
-    env:
-      FORCE_COLOR: 2
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install System Dependencies
-        uses: mamba-org/setup-micromamba@v2
-        with:
-          cache-environment: true
-          post-cleanup: 'all'
-          environment-name: cylc-lint-test
-          create-args: >-
-            python=${{ matrix.python-version }}
-            pip
-            bash
-            shellcheck
-
-      - name: Install Python Dependencies
-        run: |
-          pip install -e ."[tests]"
-
-      - name: Flake8
-        run: flake8
-
-      - name: Bandit
-        run: |
-          bandit -r --ini .bandit cylc/flow
-
-      - name: Shellchecker
-        run: etc/bin/shellchecker
-
-      - name: MyPy
-        run: mypy
-
-      - name: Towncrier - draft changelog
-        uses: cylc/release-actions/towncrier-draft@v1
-
-      - name: Linkcheck
-        run: pytest -m linkcheck --dist=load --color=yes -n 10 tests/unit/test_links.py
-
-  codecov:
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 2
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Codecov upload
-        uses: codecov/codecov-action@v5
-        with:
-          name: ${{ github.workflow }}
-          flags: fast-tests
-          fail_ci_if_error: true
-          verbose: true
-          # Token not required for public repos, but avoids upload failure due
-          # to rate-limiting (but not for PRs opened from forks)
-          token: ${{ secrets.CODECOV_TOKEN }}
+      - continue-on-error: true
+        run: pytest tests/unit/test_hostuserutil.py
