@@ -27,7 +27,7 @@ jobs:
       fail-fast: false # don't stop on first failure
       matrix:
         os: ['macos-latest']
-        python-version: ['3.8', '3']
+        python-version: ['3']
     env:
       TZ: ${{ matrix.time-zone }}
       PYTEST_ADDOPTS: --cov --cov-append -n 5 --color=yes
@@ -85,6 +85,8 @@ jobs:
           print(socket.gethostbyaddr('127.0.0.1'))
           print("OK")
           print(socket.gethostbyaddr('localhost'))
+          print("OK")
+          print(socket.gethostbyaddr(socket.getfqdn('localhost')))
 
       - continue-on-error: true
         run: pytest tests/unit/test_host_select.py
