@@ -60,6 +60,7 @@ from typing import (
 from cylc.flow.cfgspec.glbl_cfg import glbl_cfg
 
 
+LOCALHOST = 'localhost'
 IS_MAC_OS = 'darwin' in sys.platform.lower()
 
 
@@ -140,7 +141,9 @@ class HostUtil:
             target = socket.getfqdn()
         if target not in self._host_exs:
             try:
-                if IS_MAC_OS and target in {
+                if target == LOCALHOST:
+                    name = target
+                elif IS_MAC_OS and target in {
                     '1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.'
                     '0.0.0.0.0.0.ip6.arpa',
                     '1.0.0.127.in-addr.arpa',
@@ -234,7 +237,7 @@ class HostUtil:
             else:
                 this_name = self._get_host_info()[0].lower()
                 self._remote_hosts[host] = (
-                    host_name not in {this_name, 'localhost'}
+                    host_name not in {this_name, LOCALHOST}
                 )
         return self._remote_hosts[host]
 
