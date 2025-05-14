@@ -26,34 +26,19 @@ jobs:
     strategy:
       fail-fast: false # don't stop on first failure
       matrix:
-        os: ['macos-latest']
+        os: ['macos-15', 'macos-14', 'macos-13']
         python-version: ['3']
     env:
       TZ: ${{ matrix.time-zone }}
       PYTEST_ADDOPTS: --cov --cov-append -n 5 --color=yes
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Install System Dependencies
         uses: mamba-org/setup-micromamba@v2
         with:
-          cache-environment: true
           post-cleanup: 'all'
           environment-name: cylc-fast-test
           create-args: >-
             python=${{ matrix.python-version }}
-            pip
-            bash
-            subversion
-            sqlite
-
-      - name: Install Python Dependencies
-        run: |
-          pip install -e ."[all]"
-
-      - name: Configure git  # Needed by the odd test
-        uses: cylc/release-actions/configure-git@v1
 
       - run: cat /etc/hosts
 
@@ -62,37 +47,38 @@ jobs:
         continue-on-error: true
         run: |
           import socket
-          print(socket.gethostname())
-          print("OK")
-          print(socket.getfqdn('localhost'))
+          this_fqdn = socket.getfqdn()
+          print(f"FQDN: {this_fqdn}")
+          this_hostname = this_fqdn.split('.')[0]
+          print(f"hostname: {socket.gethostname()}")
+          this_ip = socket.gethostbyname(this_fqdn)
+          print(f"IP: {this_ip}")
+          localhost_ip = socket.gethostbyname('localhost')
+          print(f"localhost IP: {localhost_ip}")
 
-      - name: Nedry
-        shell: /Users/runner/micromamba/envs/cylc-fast-test/bin/python {0}
-        continue-on-error: true
-        run: |
-          import socket
-          print(socket.gethostbyname_ex(socket.gethostname()))
-          print("OK")
-          print(socket.gethostbyname_ex("localhost"))
-          print("OK")
-          print(socket.gethostbyname_ex(socket.getfqdn('localhost')))
+          print("")
 
-      - name: Dodgson
-        shell: /Users/runner/micromamba/envs/cylc-fast-test/bin/python {0}
-        continue-on-error: true
-        run: |
-          import socket
-          print(socket.gethostbyaddr('127.0.0.1'))
-          print("OK")
-          print(socket.gethostbyaddr('localhost'))
-          print("OK")
-          print(socket.gethostbyaddr(socket.getfqdn('localhost')))
-
-      - continue-on-error: true
-        run: pytest tests/unit/test_host_select.py
-
-      - continue-on-error: true
-        run: pytest tests/unit/test_host_select_remote.py
-
-      - continue-on-error: true
-        run: pytest tests/unit/test_hostuserutil.py
+          for func in [
+            socket.getfqdn,
+            socket.gethostbyaddr,
+            socket.gethostbyname_ex,
+          ]:
+            for x in [
+              this_fqdn,
+              this_hostname,
+              this_ip,
+              "localhost",
+              "LOCALHOST",
+              "localhost4.localdomain4",
+              "127.0.0.1",
+              "::1",
+              "1.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.0.ip6.arpa",
+              "1.0.0.127.in-addr.arpa",
+              "muldoon",
+            ]:
+              print(f"Testing {func.__name__}({x!r})")
+              try:
+                print(func(x))
+              except IOError as e:
+                print(f"{type(e).__name__}: {e}")
+              print("")
