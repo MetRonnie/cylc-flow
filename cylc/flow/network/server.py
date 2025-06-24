@@ -19,7 +19,9 @@ import asyncio
 from queue import Queue
 from textwrap import dedent
 from time import sleep
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Union
+from typing import (
+    TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Union
+)
 
 from graphql.execution import ExecutionResult
 from graphql.execution.executors.asyncio import AsyncioExecutor
@@ -32,7 +34,7 @@ from cylc.flow.network.authorisation import authorise
 from cylc.flow.network.graphql import (
     CylcGraphQLBackend, IgnoreFieldMiddleware, instantiate_middleware
 )
-from cylc.flow.network.publisher import WorkflowPublisher
+from cylc.flow.network.publisher import PublisherItem, WorkflowPublisher
 from cylc.flow.network.replier import WorkflowReplier
 from cylc.flow.network.resolvers import Resolvers
 from cylc.flow.network.schema import schema
@@ -40,6 +42,7 @@ from cylc.flow.data_store_mgr import DELTAS_MAP
 from cylc.flow.data_messages_pb2 import PbEntireWorkflow  # type: ignore
 
 if TYPE_CHECKING:
+    from threading import Barrier, Thread
     from cylc.flow.scheduler import Scheduler
 
 
@@ -127,19 +130,19 @@ class WorkflowRuntimeServer:
     OPERATE_SLEEP_INTERVAL = 0.2
     STOP_SLEEP_INTERVAL = 0.2
 
-    def __init__(self, schd):
+    def __init__(self, schd: 'Scheduler'):
 
-        self.zmq_context = None
-        self.port = None
-        self.pub_port = None
-        self.replier = None
-        self.publisher = None
-        self.loop = None
-        self.thread = None
-        self.curve_auth = None
-        self.client_pub_key_dir = None
+        self.zmq_context: Optional[zmq.Context] = None
+        self.port: Optional[int] = None
+        self.pub_port: Optional[int] = None
+        self.replier: Optional[WorkflowReplier] = None
+        self.publisher: Optional[WorkflowPublisher] = None
+        self.loop: Optional[asyncio.AbstractEventLoop] = None
+        self.thread: Optional['Thread'] = None
+        self.curve_auth: Optional[ThreadAuthenticator] = None
+        self.client_pub_key_dir: Optional[str] = None
 
-        self.schd: 'Scheduler' = schd
+        self.schd = schd
         self.resolvers = Resolvers(
             self.schd.data_store_mgr,
             schd=self.schd
@@ -148,13 +151,13 @@ class WorkflowRuntimeServer:
             IgnoreFieldMiddleware,
         ]
 
-        self.publish_queue: 'Queue[Iterable[tuple]]' = Queue()
+        self.publish_queue: 'Queue[Iterable[PublisherItem]]' = Queue()
         self.waiting_to_stop = False
         self.stopped = True
 
         self.register_endpoints()
 
-    def start(self, barrier):
+    def start(self, barrier: 'Barrier') -> None:
         """Start the TCP servers."""
         # set asyncio loop on thread
         try:
@@ -228,7 +231,7 @@ class WorkflowRuntimeServer:
         if self.publisher:
             await self.publish_queued_items()
             await self.publisher.publish(
-                (b'shutdown', str(reason).encode('utf-8'))
+                PublisherItem(b'shutdown', str(reason).encode('utf-8'))
             )
             self.publisher.stop(stop_loop=False)
             self.publisher = None
@@ -264,8 +267,9 @@ class WorkflowRuntimeServer:
     async def publish_queued_items(self) -> None:
         """Publish all queued items."""
         while self.publish_queue.qsize():
-            articles = self.publish_queue.get()
-            await self.publisher.publish(*articles)
+            await self.publisher.publish(  # type: ignore[union-attr]
+                *self.publish_queue.get()
+            )
 
     def receiver(self, message):
         """Process incoming messages and coordinate response.

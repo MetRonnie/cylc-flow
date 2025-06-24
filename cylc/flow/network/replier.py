@@ -16,7 +16,10 @@
 """Server for workflow runtime API."""
 
 from queue import Queue
-from typing import TYPE_CHECKING, Optional
+from typing import (
+    TYPE_CHECKING,
+    Optional
+)
 
 import zmq
 
@@ -24,6 +27,7 @@ from cylc.flow import LOG
 from cylc.flow.network import encode_, decode_, ZMQSocketBase
 
 if TYPE_CHECKING:
+    import zmq.asyncio
     from cylc.flow.network.server import WorkflowRuntimeServer
 
 
@@ -52,7 +56,7 @@ class WorkflowReplier(ZMQSocketBase):
     def __init__(
         self,
         server: 'WorkflowRuntimeServer',
-        context: Optional[zmq.Context] = None
+        context: Optional[zmq.asyncio.Context] = None
     ):
         super().__init__(
             zmq.REP, server.schd.workflow, bind=True, context=context

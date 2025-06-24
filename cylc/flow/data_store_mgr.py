@@ -61,7 +61,7 @@ from collections import Counter, deque
 from copy import deepcopy
 import json
 from time import time
-from typing import Union, Tuple, TYPE_CHECKING
+from typing import List, Union, Tuple, TYPE_CHECKING
 import zlib
 
 from cylc.flow import __version__ as CYLC_VERSION, LOG
@@ -72,6 +72,7 @@ from cylc.flow.data_messages_pb2 import (  # type: ignore
 from cylc.flow.exceptions import WorkflowConfigError
 from cylc.flow.id import Tokens
 from cylc.flow.network import API
+from cylc.flow.network.publisher import PublisherItem
 from cylc.flow.workflow_status import get_workflow_status
 from cylc.flow.task_job_logs import JOB_LOG_OPTS, get_task_job_log
 from cylc.flow.task_proxy import TaskProxy
@@ -395,7 +396,7 @@ class DataStoreMgr:
         }
         # internal delta
         self.delta_queues = {self.workflow_id: {}}
-        self.publish_deltas = []
+        self.publish_deltas: List[PublisherItem] = []
         # internal n-window
         self.all_task_pool = set()
         self.n_window_nodes = {}
@@ -2137,10 +2138,15 @@ class DataStoreMgr:
         for key, delta in self.deltas.items():
             if delta.ListFields():
                 result.append(
-                    (key.encode('utf-8'), delta, 'SerializeToString'))
+                    PublisherItem(
+                        key.encode('utf-8'), delta, 'SerializeToString'
+                    )
+                )
                 getattr(all_deltas, key).CopyFrom(delta)
         result.append(
-            (ALL_DELTAS.encode('utf-8'), all_deltas, 'SerializeToString')
+            PublisherItem(
+                ALL_DELTAS.encode('utf-8'), all_deltas, 'SerializeToString'
+            )
         )
         self.publish_pending = True
         return deepcopy(result)

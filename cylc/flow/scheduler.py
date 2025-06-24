@@ -255,6 +255,7 @@ class Scheduler:
 
     def __init__(self, reg: str, options: Values) -> None:
         # flow information
+        import debugpy; debugpy.listen(6678); print('Waiting for debugger attach'); debugpy.wait_for_client()
         self.workflow = reg
         self.workflow_name = get_workflow_name_from_id(self.workflow)
         self.owner = get_user()

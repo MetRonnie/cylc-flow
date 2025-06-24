@@ -15,10 +15,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """Package for network interfaces to Cylc scheduler objects."""
 
+from abc import ABCMeta
 import asyncio
 import getpass
 import json
-from typing import Optional
+from typing import (
+    Any,
+    Optional,
+)
 
 import zmq
 import zmq.asyncio
@@ -90,7 +94,7 @@ def get_location(workflow: str):
     return host, port, pub_port
 
 
-class ZMQSocketBase:
+class ZMQSocketBase(metaclass=ABCMeta):
     """Initiate the ZMQ socket bind for specified pattern.
 
     NOTE: Security to be provided via zmq.auth (see PR #3359).
@@ -111,10 +115,10 @@ class ZMQSocketBase:
 
     def __init__(
         self,
-        pattern,
+        pattern: Any,
         workflow: str,
         bind: bool = False,
-        context: Optional[zmq.Context] = None,
+        context: Optional[zmq.asyncio.Context] = None,
     ):
         self.bind = bind
         if context is None:
@@ -125,7 +129,7 @@ class ZMQSocketBase:
         self.workflow = workflow
         self.host: Optional[str] = None
         self.port: Optional[int] = None
-        self.socket: Optional[zmq.Socket] = None
+        self.socket: Optional[zmq.asyncio.Socket] = None
         self.loop: Optional[asyncio.AbstractEventLoop] = None
         self.stopping = False
 

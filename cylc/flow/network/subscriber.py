@@ -18,7 +18,9 @@
 import asyncio
 import json
 import sys
-from typing import TYPE_CHECKING, Iterable, Optional, Set, Union
+from typing import (
+    TYPE_CHECKING, Iterable, Optional, Set, Union
+)
 
 import zmq
 

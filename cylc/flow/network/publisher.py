@@ -16,7 +16,9 @@
 """Publisher for workflow runtime API."""
 
 import asyncio
-from typing import Callable, Optional, Set, Union
+from typing import (
+    Callable, NamedTuple, Optional, Set, Union
+)
 
 import zmq
 
@@ -24,9 +26,22 @@ from cylc.flow import LOG
 from cylc.flow.network import ZMQSocketBase
 
 
+class PublisherItem(NamedTuple):
+    """Item of publisher queue.
+
+    Fields:
+        topic: The topic of the message.
+        data: Data element/message to serialise and send.
+        serializer: string/func for encoding.
+    """
+    topic: bytes
+    data: object
+    serializer: Optional[str] = None
+
+
 def serialize_data(
     data: object, serializer: Union[Callable, str, None], *args, **kwargs
-):
+) -> object:
     """Serialize by specified method."""
     if callable(serializer):
         return serializer(data, *args, **kwargs)
@@ -64,28 +79,16 @@ class WorkflowPublisher(ZMQSocketBase):
         LOG.debug('stopping zmq publisher...')
         self.stopping = True
 
-    async def send_multi(
-        self,
-        topic: bytes,
-        data: object,
-        serializer: Union[Callable, str, None] = None
-    ) -> None:
-        """Send multi part message.
-
-        Args:
-            topic: The topic of the message.
-            data: Data element/message to serialise and send.
-            serializer: string/func for encoding.
-
-        """
+    async def send_multi(self, item: PublisherItem) -> None:
+        """Send multi part message."""
         if self.socket:
-            self.topics.add(topic)
+            self.topics.add(item.topic)
             self.socket.send_multipart(
-                [topic, serialize_data(data, serializer)]
+                [item.topic, serialize_data(item.data, item.serializer)]
             )
         # else we are in the process of shutting down - don't send anything
 
-    async def publish(self, *items: tuple) -> None:
+    async def publish(self, *items: PublisherItem) -> None:
         """Publish topics.
 
         Args:
@@ -93,8 +96,9 @@ class WorkflowPublisher(ZMQSocketBase):
 
         """
         try:
+            # await gather_coros(self.send_multi, items)
             await asyncio.gather(
-                *(self.send_multi(*item) for item in items)
+                *(self.send_multi(item) for item in items)
             )
         except Exception as exc:
-            LOG.exception(f"publish: {exc}")
+            LOG.error(f"publish - {type(exc).__name__}: {exc}")
