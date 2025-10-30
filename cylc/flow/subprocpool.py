@@ -19,7 +19,6 @@ from collections import deque
 import json
 import os
 import select
-from signal import SIGKILL
 import sys
 import shlex
 from tempfile import SpooledTemporaryFile
@@ -184,7 +183,7 @@ class SubProcPool:
 
     ERR_WORKFLOW_STOPPING = 'workflow stopping, command not run'
     JOBS_SUBMIT = 'jobs-submit'
-    POLLREAD = select.POLLIN | select.POLLPRI
+    POLLREAD = 0  # select.POLLIN | select.POLLPRI
     RET_CODE_WORKFLOW_STOPPING = 999
 
     def __init__(self):
@@ -279,10 +278,10 @@ class SubProcPool:
             # Command timed out, kill it
             if time() > ctx.timeout:
                 err_xtra = ""
-                if _killpg(proc, SIGKILL):
-                    err_xtra = (
-                        f"\nkilled on timeout ({self.proc_pool_timeout})"
-                    )
+                # if _killpg(proc, SIGKILL):
+                #     err_xtra = (
+                #         f"\nkilled on timeout ({self.proc_pool_timeout})"
+                #     )
                 self._proc_exit(
                     proc, err_xtra, ctx,
                     callback=callback,
@@ -415,8 +414,8 @@ class SubProcPool:
         # Kill remaining processes
         for value in self.runnings:
             proc = value[0]
-            if proc:
-                _killpg(proc, SIGKILL)
+            # if proc:
+            #     _killpg(proc, SIGKILL)
         # Wait for child processes
         self.process()
 

@@ -32,7 +32,6 @@ import stat
 import sys
 import traceback
 from shutil import rmtree
-from signal import SIGKILL
 from subprocess import DEVNULL  # nosec
 
 from cylc.flow.task_message import (
@@ -340,7 +339,7 @@ class JobRunnerManager():
                         if line.startswith(CYLC_JOB_PID + "="):
                             pid = line.strip().split("=", 1)[1]
                             try:
-                                os.killpg(os.getpgid(int(pid)), SIGKILL)
+                                os.killpg(os.getpgid(int(pid)), 'SIGKILL')
                             except (OSError, ValueError) as exc:
                                 traceback.print_exc()
                                 return (1, str(exc))

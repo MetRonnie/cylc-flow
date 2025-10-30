@@ -17,7 +17,6 @@
 
 import os
 from pathlib import Path
-from posix import WIFSIGNALED
 import shlex
 from shlex import quote
 import signal
@@ -171,11 +170,11 @@ def run_cmd(
     if manage:
         watch_and_kill(proc)
     res = proc.wait()
-    if WIFSIGNALED(res):
-        sys.exit(
-            r'ERROR: command terminated by signal %d: %s'
-            % (res, ' '.join(quote(item) for item in command))
-        )
+    # if WIFSIGNALED(res):
+    #     sys.exit(
+    #         r'ERROR: command terminated by signal %d: %s'
+    #         % (res, ' '.join(quote(item) for item in command))
+    #     )
     if capture_status or not res:
         return res
     sys.exit(
