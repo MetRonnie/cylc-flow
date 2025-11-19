@@ -85,10 +85,7 @@ if TYPE_CHECKING:
     from enum import Enum
 
     from graphql import GraphQLResolveInfo
-    from graphql.type.definition import (
-        GraphQLNamedType,
-        GraphQLType,
-    )
+    from graphql.type.definition import GraphQLType
 
     from cylc.flow.network.resolvers import BaseResolvers
 
@@ -284,7 +281,7 @@ def field_name_from_type(obj_type: 'GraphQLType') -> str:
 
     If the type is a list or non-null, the base field is extracted.
     """
-    named_type = cast('GraphQLNamedType', get_named_type(obj_type))
+    named_type = get_named_type(obj_type)
     try:
         return NODE_MAP[named_type.name]
     except KeyError:
@@ -293,7 +290,7 @@ def field_name_from_type(obj_type: 'GraphQLType') -> str:
 
 def get_resolvers(info: 'GraphQLResolveInfo') -> 'BaseResolvers':
     """Return the resolvers from the context."""
-    return cast('dict', info.context)['resolvers']
+    return info.context['resolvers']
 
 
 def process_resolver_info(
@@ -404,9 +401,7 @@ async def get_nodes_by_ids(
             parent_args.update(
                 {'id': parent_id, 'delta_store': False}
             )
-            parent_type = cast(
-                'GraphQLNamedType', get_named_type(info.parent_type)
-            )
+            parent_type = get_named_type(info.parent_type)
             if parent_type.name in NODE_MAP:
                 parent = await resolvers.get_node_by_id(
                     NODE_MAP[parent_type.name], parent_args

@@ -35,6 +35,7 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
+    cast,
 )
 
 
@@ -46,6 +47,17 @@ BOOL_SYMBOLS: Dict[bool, str] = {
 }
 
 _NAT_SORT_SPLIT = re.compile(r'([\d\.]+)')
+
+
+_T = TypeVar('_T')
+
+
+def cast_non_null(var: _T | None) -> _T:
+    """Type cast an "Optional" variable to its non-None type.
+
+    Does not perform any runtime checks.
+    """
+    return cast('_T', var)
 
 
 def uniq(iterable):

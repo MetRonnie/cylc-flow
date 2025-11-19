@@ -39,6 +39,7 @@ from cylc.flow.id import (
 from cylc.flow.id_cli import contains_fnmatch
 from cylc.flow.scripts.set import XTRIGGER_PREREQ_PREFIX
 from cylc.flow.task_outputs import TASK_OUTPUT_SUCCEEDED
+from cylc.flow.util import cast_non_null
 
 
 if TYPE_CHECKING:
@@ -361,7 +362,7 @@ def is_tasks(ids: Iterable[str]) -> 'Set[TaskTokens]':
         # if the cycle is not a glob or reference, standardise it
         if (
             # cycle point is a glob
-            not contains_fnmatch(cast('str', tokens['cycle']))
+            not contains_fnmatch(cast_non_null(tokens['cycle']))
             # cycle point is a reference to the ICP/FCP
             and tokens['cycle'] not in {'^', '$'}
         ):

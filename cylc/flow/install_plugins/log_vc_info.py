@@ -61,26 +61,36 @@ Any uncommitted changes will also be saved as a diff in
 
 import json
 from pathlib import Path
-from subprocess import Popen, DEVNULL, PIPE
+from subprocess import (
+    DEVNULL,
+    PIPE,
+    Popen,
+)
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
     Iterable,
     List,
     Optional,
-    TYPE_CHECKING,
     TextIO,
     Union,
-    cast,
     overload,
 )
 
-from cylc.flow import LOG as _LOG, LoggerAdaptor
+from cylc.flow import (
+    LOG as _LOG,
+    LoggerAdaptor,
+)
 from cylc.flow.exceptions import CylcError
 import cylc.flow.flags
 from cylc.flow.pipe_poller import pipe_poller
-from cylc.flow.util import format_cmd
+from cylc.flow.util import (
+    cast_non_null,
+    format_cmd,
+)
 from cylc.flow.workflow_files import WorkflowFiles
+
 
 if TYPE_CHECKING:
     from optparse import Values
@@ -257,7 +267,7 @@ def _run_cmd(
         raise VCSNotInstalledError(vcs, exc) from None
     if stdout == PIPE:
         out, err = pipe_poller(
-            proc, cast('TextIO', proc.stdout), cast('TextIO', proc.stderr)
+            proc, cast_non_null(proc.stdout), cast_non_null(proc.stderr)
         )
     else:
         out, err = proc.communicate()

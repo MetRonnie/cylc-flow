@@ -48,7 +48,6 @@ from typing import (
     Sequence,
     Set,
     Union,
-    cast,
 )
 
 from cylc.flow import (
@@ -736,7 +735,7 @@ class TaskEventsManager():
         if submit_num is None:
             submit_num = itask.submit_num
         if isinstance(severity, int):
-            severity = cast('str', getLevelName(severity))
+            severity = getLevelName(severity)
         lseverity = str(severity).lower()
 
         # Any message represents activity.

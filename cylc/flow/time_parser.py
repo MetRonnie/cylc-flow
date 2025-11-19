@@ -30,12 +30,24 @@ time for inter-cycle task references such as "foo[-P6Y] => foo".
 """
 
 import re
-from typing import TYPE_CHECKING, List, Optional, Pattern, Tuple, Union, cast
+from typing import (
+    TYPE_CHECKING,
+    List,
+    Optional,
+    Pattern,
+    Tuple,
+    Union,
+)
 
-from metomi.isodatetime.data import Duration, TimeRecurrence
+from metomi.isodatetime.data import (
+    Duration,
+    TimeRecurrence,
+)
 from metomi.isodatetime.exceptions import IsodatetimeError
 from metomi.isodatetime.parsers import (
-    DurationParser, TimePointParser, TimeRecurrenceParser
+    DurationParser,
+    TimePointParser,
+    TimeRecurrenceParser,
 )
 
 from cylc.flow import LOG
@@ -46,9 +58,12 @@ from cylc.flow.exceptions import (
     CylcTimeSyntaxError,
 )
 import cylc.flow.flags
+from cylc.flow.util import cast_non_null
+
 
 if TYPE_CHECKING:
     from metomi.isodatetime.data import TimePoint
+
     from cylc.flow.cycling.iso8601 import ISO8601Point
 
 
@@ -306,8 +321,8 @@ class CylcTimeParser:
                 # isodatetime only reverses bounded end-point recurrences.
                 # This is unbounded, and will come back in reverse order.
                 # We need to reverse it.
-                start_point = cast(  # (end pt can't be None if start is None)
-                    'TimePoint', end_point
+                start_point = cast_non_null(
+                    end_point  # (end pt can't be None if start is None)
                 )
                 repetitions = 1
                 while start_point > context_start_point:

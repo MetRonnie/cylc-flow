@@ -52,11 +52,8 @@ if TYPE_CHECKING:
     from cylc.flow.flow_mgr import FlowNums
 
 
-DbArgDict = Dict[str, Any]
-DbUpdateTuple = Union[
-    Tuple[DbArgDict, DbArgDict],
-    Tuple[str, list]
-]
+DbArgDict = dict[str, Any]
+DbUpdateTuple = tuple[DbArgDict, DbArgDict] | tuple[str, list]
 
 
 @dataclass

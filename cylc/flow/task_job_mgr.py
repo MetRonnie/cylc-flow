@@ -46,7 +46,6 @@ from typing import (
     Set,
     Tuple,
     Union,
-    cast,
 )
 
 from cylc.flow import LOG
@@ -121,7 +120,10 @@ from cylc.flow.task_state import (
     TASK_STATUS_SUBMITTED,
     TASK_STATUS_WAITING,
 )
-from cylc.flow.util import serialise_set
+from cylc.flow.util import (
+    cast_non_null,
+    serialise_set,
+)
 from cylc.flow.wallclock import (
     get_current_time_string,
     get_time_string_from_unix_time,
@@ -1225,11 +1227,10 @@ class TaskJobManager:
                 LOG.debug(msg)
 
             try:
-                platform = cast(
+                platform = cast_non_null(
                     # We know this is not None because eval_platform() or
                     # eval_host() called above ensure it is set or else we
                     # return early if the subshell is still evaluating.
-                    'dict',
                     get_platform(
                         platform_name or rtconfig,
                         itask.tdef.name,
