@@ -500,20 +500,16 @@ def parse_rm_dirs(rm_dirs: Iterable[str]) -> Set[str]:
     return result
 
 
-def is_relative_to(path1: Union[Path, str], path2: Union[Path, str]) -> bool:
+def is_relative_to(path1: Path | str, path2: Path | str) -> bool:
     """Return whether or not path1 is relative to path2 (including if they are
     the same path).
 
     Normalizes both paths to avoid trickery with paths containing `..`
     somewhere in them.
     """
-    # In future, we can just use pathlib.Path.is_relative_to()
-    # when Python 3.9 becomes the minimum supported version
-    try:
-        Path(os.path.normpath(path1)).relative_to(os.path.normpath(path2))
-    except ValueError:
-        return False
-    return True
+    return Path(os.path.normpath(path1)).is_relative_to(
+        os.path.normpath(path2)
+    )
 
 
 def get_workflow_name_from_id(workflow_id: str) -> str:

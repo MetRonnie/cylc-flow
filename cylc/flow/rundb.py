@@ -507,17 +507,6 @@ class CylcWorkflowDAO:
         # something went wrong
         # (includes DB file not found, transaction processing issue, db locked)
         except sqlite3.Error as e:
-            # Detailed error codes are only available for python >= 3.11
-            if hasattr(e, "sqlite_errorcode"):
-                error_code = str(e.sqlite_errorcode)
-            else:
-                error_code = "Not available"
-
-            if hasattr(e, "sqlite_errorname"):
-                error_name = e.sqlite_errorname
-            else:
-                error_name = "Not available"
-
             if not self.is_public:
                 # incase this isn't a filesystem issue, log the statements
                 # which make up the transaction to assist debug
@@ -525,13 +514,13 @@ class CylcWorkflowDAO:
                     'An error occurred when writing to the database %(file)s,'
                     ' this is probably a filesystem issue.'
                     ' The error was: %(error)s'
-                    ' SQLite error code: %(error_code)s'
+                    ' SQLite error code: %(error_code)i'
                     ' SQLite error name: %(error_name)s'
                     ' The attempted transaction was:\n %(transaction)s' % {
                         "file": self.db_file_name,
                         "error": str(e),
-                        "error_code": error_code,
-                        "error_name": error_name,
+                        "error_code": e.sqlite_errorcode,
+                        "error_name": e.sqlite_errorname,
                         "transaction": pformat(sql_queue)
                     }
                 )
@@ -540,13 +529,13 @@ class CylcWorkflowDAO:
             LOG.info(
                 "%(file)s: write attempt (%(attempt)d)"
                 " did not complete: %(error)s\n"
-                " SQLite error code: %(error_code)s\n"
+                " SQLite error code: %(error_code)i\n"
                 " SQLite error name: %(error_name)s" % {
                     "file": self.db_file_name,
                     "attempt": self.n_tries,
                     "error": str(e),
-                    "error_code": error_code,
-                    "error_name": error_name
+                    "error_code": e.sqlite_errorcode,
+                    "error_name": e.sqlite_errorname,
                 }
             )
             if self.conn is not None:
