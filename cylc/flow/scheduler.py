@@ -25,7 +25,7 @@ from queue import (
     Empty,
     Queue,
 )
-from shlex import quote
+import shlex
 import signal
 from subprocess import (
     DEVNULL,
@@ -160,7 +160,6 @@ from cylc.flow.templatevars import (
     get_template_vars,
 )
 from cylc.flow.timer import Timer
-from cylc.flow.util import cli_format
 from cylc.flow.wallclock import (
     get_current_time_string,
     get_time_string_from_unix_time as time2str,
@@ -1127,7 +1126,7 @@ class Scheduler:
             fields.PID:
                 str(proc.pid),
             fields.COMMAND:
-                cli_format(proc.cmdline()),
+                shlex.join(proc.cmdline()),
             fields.PUBLISH_PORT:
                 str(self.server.pub_port),
             fields.WORKFLOW_RUN_DIR_ON_WORKFLOW_HOST:
@@ -1559,7 +1558,7 @@ class Scheduler:
     def workflow_auto_restart(self, max_retries: int = 3) -> bool:
         """Attempt to restart the workflow assuming it has already stopped."""
         cmd = [
-            'cylc', 'play', quote(self.workflow),
+            'cylc', 'play', shlex.quote(self.workflow),
             *verbosity_to_opts(cylc.flow.flags.verbosity)
         ]
         if self.options.abort_if_any_task_fails:
