@@ -1426,10 +1426,8 @@ class DataStoreMgr:
             # Cannot batch as task is active (all jobs retrieved at once).
             if itask.submit_num > 0:
                 flow_db = self.schd.workflow_db_mgr.pri_dao
-                for row in flow_db.select_jobs_for_datastore(
-                        {itask.identity}
-                ):
-                    self.insert_db_job(1, row)
+                for row in flow_db.select_jobs_for_datastore({itask.identity}):
+                    self.insert_db_job(row)
         else:
             # Batch non-active node for load of DB history.
             self.db_load_task_proxies[itask.identity] = (
@@ -1629,7 +1627,7 @@ class DataStoreMgr:
 
         # Batch load jobs from DB.
         for row in flow_db.select_jobs_for_datastore(task_ids):
-            self.insert_db_job(1, row)
+            self.insert_db_job(row)
 
         self.db_load_task_proxies.clear()
 
@@ -1774,43 +1772,31 @@ class DataStoreMgr:
         tp_delta.jobs.append(j_id)
         self.updates_pending = True
 
-    def insert_db_job(self, row_idx, row):
+    def load_jobs_for_restart(self):
         """Load job element from DB post restart."""
-        if row_idx == 0:
-            LOG.info("LOADING job data")
-        (
-            point_string,
-            name,
-            submit_num,
-            time_submit,
-            submit_status,
-            time_run,
-            time_run_exit,
-            run_status,
-            job_runner_name,
-            job_id,
-            platform_name
-        ) = row
-        tp_tokens = self.id_.duplicate(
-            cycle=point_string,
-            task=name,
-        )
-        tproxy: Optional[PbTaskProxy]
+        LOG.info("LOADING job data")
+        for row in self.schd.workflow_db_mgr.pri_dao.select_jobs_for_restart():
+            self.insert_db_job(row)
+
+    def insert_db_job(self, row: Any):
+        """Add job from DB to data store."""
+        tp_tokens = self.id_.duplicate(cycle=row.cycle, task=row.name)
+        tproxy: PbTaskProxy | None
         tp_id, tproxy = self.store_node_fetcher(tp_tokens)
         if not tproxy:
             return
-        j_tokens = tp_tokens.duplicate(job=str(submit_num))
+        j_tokens = tp_tokens.duplicate(job=str(row.submit_num))
         j_id = j_tokens.id
 
-        if run_status is not None:
-            if run_status == 0:
+        if row.run_status is not None:
+            if row.run_status == 0:
                 status = TASK_STATUS_SUCCEEDED
             else:
                 status = TASK_STATUS_FAILED
-        elif time_run is not None:
+        elif row.time_run is not None:
             status = TASK_STATUS_RUNNING
-        elif submit_status is not None:
-            if submit_status == 0:
+        elif row.submit_status is not None:
+            if row.submit_status == 0:
                 status = TASK_STATUS_SUBMITTED
             else:
                 status = TASK_STATUS_SUBMIT_FAILED
@@ -1822,21 +1808,22 @@ class DataStoreMgr:
             j_buf = PbJob(
                 stamp=f'{j_id}@{update_time}',
                 id=j_id,
-                submit_num=submit_num,
+                submit_num=row.submit_num,
                 state=status,
                 task_proxy=tp_id,
-                submitted_time=time_submit,
-                started_time=time_run,
-                finished_time=time_run_exit,
-                job_runner_name=job_runner_name,
-                job_id=job_id,
-                platform=platform_name,
-                name=name,
+                submitted_time=row.time_submit,
+                started_time=row.time_run,
+                finished_time=row.time_run_exit,
+                job_runner_name=row.job_runner_name,
+                job_id=row.job_id,
+                platform=row.platform_name,
+                name=row.name,
                 cycle_point=tproxy.cycle_point,
             )
             # Add in log files.
             j_buf.job_log_dir = get_task_job_log(
-                self.schd.workflow, point_string, name, submit_num)
+                self.schd.workflow, row.cycle, row.name, row.submit_num
+            )
         except WorkflowConfigError:
             LOG.exception((
                 'ignoring job %s from the workflow run database\n'
@@ -1854,7 +1841,7 @@ class DataStoreMgr:
                     id=tp_id,
                 )
             )
-            tp_delta.job_submits = max((submit_num, tp_delta.job_submits))
+            tp_delta.job_submits = max((row.submit_num, tp_delta.job_submits))
             tp_delta.jobs.append(j_id)
             self.updates_pending = True
 

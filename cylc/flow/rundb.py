@@ -772,7 +772,7 @@ class CylcWorkflowDAO:
                 return ret
         return None
 
-    def select_jobs_for_restart(self, callback):
+    def select_jobs_for_restart(self) -> sqlite3.Cursor:
         """Select from task_pool+task_states+task_jobs for restart.
 
         Invoke callback(row_idx, row) on each row of the result.
@@ -801,9 +801,9 @@ class CylcWorkflowDAO:
             "task_pool": self.TABLE_TASK_POOL,
             "task_jobs": self.TABLE_TASK_JOBS,
         }
-        stmt = form_stmt % form_data
-        for row_idx, row in enumerate(self.connect().execute(stmt)):
-            callback(row_idx, list(row))
+        cursor = self.connect().execute(form_stmt % form_data)
+        cursor.row_factory = namedtuple_factory
+        return cursor
 
     def select_task_job_run_times(self, callback):
         """Select run times of succeeded task jobs grouped by task names.
@@ -1120,11 +1120,11 @@ class CylcWorkflowDAO:
         return list(self.connect().execute(stmt))
 
     def select_jobs_for_datastore(
-        self, task_ids
-    ):
+        self, *task_ids: str
+    ) -> Iterable:
         """Select jobs of of specified tasks."""
         if not task_ids:
-            return []
+            return ()
         form_stmt = r"""
             SELECT
                 %(task_states)s.cycle,
@@ -1156,8 +1156,9 @@ class CylcWorkflowDAO:
             "task_jobs": self.TABLE_TASK_JOBS,
             "task_ids": ', '.join(f"'{val}'" for val in task_ids),
         }
-        stmt = form_stmt % form_data
-        return list(self.connect().execute(stmt))
+        cursor = self.connect().execute(form_stmt % form_data)
+        cursor.row_factory = namedtuple_factory
+        return cursor
 
     def vacuum(self):
         """Vacuum to the database."""
