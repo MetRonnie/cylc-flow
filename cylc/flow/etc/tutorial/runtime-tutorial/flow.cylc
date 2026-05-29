@@ -4,7 +4,7 @@
 
 [scheduling]
     # TODO: Set initial cycle point
-    # TODO: Set final cycle point
+    # TODO: Set stop after cycle point
     [[graph]]
         # Repeat every three hours starting at the initial cycle point.
         PT3H = """

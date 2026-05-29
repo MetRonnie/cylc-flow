@@ -11,7 +11,7 @@
     # * - PT7H subtracts 7 hours from the time.
     initial cycle point = previous(T-00) - PT7H
     # Stop the workflow 6 hours after the initial cycle point.
-    final cycle point = +PT6H
+    stop after cycle point = +PT6H
     [[graph]]
         # Repeat every three hours starting at the initial cycle point.
         PT3H = """
