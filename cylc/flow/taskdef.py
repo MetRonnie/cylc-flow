@@ -129,20 +129,9 @@ def generate_graph_parents(
                 TaskTuple(parent_name, parent_point, is_abs)
             )
 
-    if tdef.sequential:
-        # Add implicit previous-instance parent.
-        closest_prev_point: PointBase | None = max(
-            (
-                prev
-                for seq in tdef.sequences
-                if (prev := seq.get_prev_point(point)) is not None
-            ),
-            default=None,
-        )
-        if closest_prev_point is not None:
-            graph_parents.append(
-                TaskTuple(tdef.name, closest_prev_point, False)
-            )
+    # Add implicit previous-instance parent if task is sequential:
+    if (closest_prev_point := tdef.prev_sequential_point(point)) is not None:
+        graph_parents.append(TaskTuple(tdef.name, closest_prev_point, False))
 
     return graph_parents
 
@@ -484,6 +473,19 @@ class TaskDef:
             not parent_points
             or all(x < cutoff for x in parent_points)
             or self.has_only_abs_triggers(point)
+        )
+
+    def prev_sequential_point(self, point: 'PointBase') -> 'PointBase | None':
+        """If this task is sequential, return the nearest previous point."""
+        if not self.sequential:
+            return None
+        return max(
+            (
+                prev
+                for seq in self.sequences
+                if (prev := seq.get_nearest_prev_point(point)) is not None
+            ),
+            default=None,
         )
 
     def __repr__(self) -> str:

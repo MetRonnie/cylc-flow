@@ -464,22 +464,15 @@ class TaskState:
                 else:
                     prerequisites[cpre.instantaneous_hash()] = cpre
 
-        if tdef.sequential:
-            # Add a previous-instance succeeded prerequisite.
-            adjusted = []
-            for seq in tdef.sequences:
-                prv = seq.get_nearest_prev_point(point)
-                if prv:
-                    # None if out of sequence bounds.
-                    adjusted.append(prv)
-            if adjusted:
-                p_prev = max(adjusted)
-                cpre = Prerequisite(point)
-                cpre[(p_prev, tdef.name, TASK_STATUS_SUCCEEDED)] = (
-                    p_prev < tdef.start_point
-                )
-                cpre.set_conditional_expr(tdef.name)
-                prerequisites[cpre.instantaneous_hash()] = cpre
+        # Add a previous-instance succeeded prerequisite if sequential task:
+        # TODO: should this be replaced by TaskDef.get_prerequisites()?
+        if (p_prev := tdef.prev_sequential_point(point)) is not None:
+            cpre = Prerequisite(point)
+            cpre[(p_prev, tdef.name, TASK_STATUS_SUCCEEDED)] = (
+                p_prev < tdef.start_point
+            )
+            cpre.set_conditional_expr(tdef.name)
+            prerequisites[cpre.instantaneous_hash()] = cpre
 
         self.suicide_prerequisites = list(suicide_prerequisites.values())
         self.prerequisites = list(prerequisites.values())
