@@ -1033,37 +1033,6 @@ def check_flow_file(
     flow_file_path = Path(expand_path(path), WorkflowFiles.FLOW_FILE)
     suite_rc_path = Path(expand_path(path), WorkflowFiles.SUITE_RC)
 
-    # BACK COMPAT:
-    #   flow.cylc -> suite.rc symlink for workflow definition ONLY (e.g, "cylc
-    #   play", "cylc validate", etc), this symlink should remain supported for
-    #   workflow DETECTION (e.g, "cylc scan", "cylc client") until 8.11.0.
-    # FROM/TO:
-    #   8.?
-    # REMOVE AT:
-    #   8.8.0
-    if flow_file_path.resolve().name == WorkflowFiles.SUITE_RC:
-        # flow.cylc -> suite.rc (this is permitted for historical reasons)
-        if allow_suite_rc:
-            LOG.warning(
-                f'{WorkflowFiles.FLOW_FILE} is a symlink to'
-                f' {WorkflowFiles.SUITE_RC} which is now deprecated. Please'
-                f' complete the transition to {WorkflowFiles.FLOW_FILE}.'
-                f' This will become an error in Cylc 8.8.0.'
-            )
-            if flow_file_path.is_file():
-                return flow_file_path
-            raise WorkflowFilesError(
-                f'No {WorkflowFiles.FLOW_FILE} or {WorkflowFiles.SUITE_RC}'
-                f' file in {path}'
-            )
-        else:
-            raise WorkflowFilesError(sstrip(f'''
-                {WorkflowFiles.SUITE_RC} found in {path}.
-
-                Support for {WorkflowFiles.SUITE_RC} files was removed in
-                Cylc 8.7.0: {COMPAT_MODE_URL}
-            '''))
-
     if flow_file_path.exists() and suite_rc_path.exists():
         # flow.cylc & suite.rc -> error
         raise WorkflowFilesError(
