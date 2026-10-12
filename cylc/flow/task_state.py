@@ -17,11 +17,11 @@
 
 """Task state related logic."""
 
+from itertools import chain
 from typing import (
     TYPE_CHECKING,
     Dict,
     List,
-    Optional,
 )
 
 from cylc.flow.prerequisite import Prerequisite
@@ -38,6 +38,11 @@ from cylc.flow.wallclock import get_current_time_string
 
 
 if TYPE_CHECKING:
+    from collections.abc import (
+        Collection,
+        Iterator,
+    )
+
     from cylc.flow.cycling import PointBase
     from cylc.flow.prerequisite import PrereqTuple
     from cylc.flow.taskdef import TaskDef
@@ -187,6 +192,23 @@ def status_geq(status_a, status_b):
             TASK_STATUSES_ORDERED.index(status_b))
 
 
+def extract_group_state(child_states: 'Collection[str]') -> str | None:
+    """Summarise child states as a group."""
+    for state in (
+        TASK_STATUS_SUBMIT_FAILED,
+        TASK_STATUS_FAILED,
+        TASK_STATUS_EXPIRED,
+        TASK_STATUS_RUNNING,
+        TASK_STATUS_SUBMITTED,
+        TASK_STATUS_PREPARING,
+        TASK_STATUS_WAITING,
+        TASK_STATUS_SUCCEEDED
+    ):
+        if state in child_states:
+            return state
+    return None
+
+
 class TaskState:
     """Task status and utilities.
 
@@ -280,17 +302,17 @@ class TaskState:
 
     def __call__(
         self,
-        *status: Optional[str],
-        is_held: Optional[bool] = None,
-        is_queued: Optional[bool] = None,
-        is_runahead: Optional[bool] = None,
+        *statuses: str,
+        is_held: bool | None = None,
+        is_queued: bool | None = None,
+        is_runahead: bool | None = None,
     ) -> bool:
         """Compare task state attributes.
 
         Args:
-            status:
+            statuses:
                 Check if the task status is one of the ones provided, or
-                do not check the task state if None.
+                do not check the task state if no statuses are provided.
             is_held:
                 Check the task is_held attribute is the same as provided, or
                 do not check the is_held attribute if None.
@@ -304,8 +326,8 @@ class TaskState:
         """
         return (
             (
-                not status
-                or self.status in status
+                not statuses
+                or self.status in statuses
             ) and (
                 is_held is None
                 or self.is_held == is_held
@@ -318,33 +340,28 @@ class TaskState:
             )
         )
 
-    def xtriggers_all_satisfied(self):
+    def xtriggers_all_satisfied(self) -> bool:
         """Return True if all xtriggers are satisfied."""
         return all(self.xtriggers.values())
 
-    def external_triggers_all_satisfied(self):
+    def external_triggers_all_satisfied(self) -> bool:
         """Return True if all external triggers are satisfied."""
         return all(self.external_triggers.values())
 
-    def prerequisites_all_satisfied(self):
+    def prerequisites_all_satisfied(self) -> bool:
         """Return True if (non-suicide) prerequisites are fully satisfied."""
         return all(preq.is_satisfied() for preq in self.prerequisites)
 
-    def prerequisites_are_not_all_satisfied(self):
-        """Return True if (any) prerequisites are not fully satisfied."""
-        return (not self.prerequisites_all_satisfied() or
-                not self.suicide_prerequisites_all_satisfied())
-
-    def suicide_prerequisites_all_satisfied(self):
+    def suicide_prerequisites_all_satisfied(self) -> bool:
         """Return True if all suicide prerequisites are satisfied."""
         return all(preq.is_satisfied() for preq in self.suicide_prerequisites)
 
-    def prerequisites_get_target_points(self):
-        """Return a list of cycle points targeted by each prerequisite."""
+    def get_prerequisite_target_points(self) -> 'set[PointBase]':
+        """Return the set of cycle points targeted by all my prerequisites."""
         return {
             point
             for prerequisite in self.prerequisites
-            for point in prerequisite.get_target_points()
+            for point in prerequisite.iter_target_points()
         }
 
     def prerequisites_eval_all(self) -> None:
@@ -353,9 +370,8 @@ class TaskState:
 
         Provides validation - will abort on illegal trigger expressions.
         """
-        for preqs in [self.prerequisites, self.suicide_prerequisites]:
-            for preq in preqs:
-                preq.is_satisfied()
+        for preq in chain(self.prerequisites, self.suicide_prerequisites):
+            preq.is_satisfied()
 
     def set_all_task_prerequisites_satisfied(self):
         """Set all task prerequisites satisfied."""
@@ -504,12 +520,12 @@ class TaskState:
             for xtrig_label in xtrig_labels:
                 self.add_xtrigger(xtrig_label)
 
-    def get_unsatisfied_prerequisites(self) -> List['PrereqTuple']:
-        return [
-            key
-            for prereq in self.prerequisites if not prereq.is_satisfied()
-            for key, satisfied in prereq.items() if not satisfied
-        ]
+    def iter_unsatisfied_prerequisites(self) -> 'Iterator[PrereqTuple]':
+        for prereq in self.prerequisites:
+            if not prereq.is_satisfied():
+                for key, satisfied in prereq.items():
+                    if not satisfied:
+                        yield key
 
     def any_satisfied_prerequisite_outputs(self) -> bool:
         """Return True if any of this task's prerequisite outputs are

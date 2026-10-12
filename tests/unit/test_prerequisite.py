@@ -16,7 +16,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from functools import partial
-from typing import Optional
 
 import pytest
 
@@ -58,10 +57,10 @@ def test_satisfied(prereq: Prerequisite):
     assert prereq._cached_satisfied is False
 
     # mark two prerequisites as satisfied
-    prereq.satisfy_me([
+    prereq.satisfy_me(
         Tokens('2000/b:succeeded', relative=True),
         Tokens('2000/c:succeeded', relative=True),
-    ])
+    )
     assert prereq._satisfied == {
         # the pre-initial dependency should be marked as satisfied
         ('1999', 'a', 'succeeded'): 'satisfied naturally',
@@ -132,7 +131,7 @@ def test_set_conditional_expr(prereq: Prerequisite):
 
 
 def test_iter_target_point_strings(prereq):
-    assert set(prereq.iter_target_point_strings()) == {
+    assert set(prereq._iter_target_point_strings()) == {
         '1999',
         '2000',
         '2001',
@@ -140,7 +139,7 @@ def test_iter_target_point_strings(prereq):
 
 
 def test_get_target_points(prereq):
-    assert set(prereq.get_target_points()) == {
+    assert set(prereq.iter_target_points()) == {
         get_point('1999'),
         get_point('2000'),
         get_point('2001'),
@@ -201,9 +200,7 @@ def test_satisfy_me():
     assert not prereq.is_satisfied()
     assert prereq._cached_satisfied is False
 
-    prereq.satisfy_me(
-        [Tokens('//1/a:x'), Tokens('//1/d:x'), Tokens('//1/c:y')],
-    )
+    prereq.satisfy_me(('1', 'a', 'x'), ('1', 'd', 'x'), ('1', 'c', 'y'))
     assert prereq._satisfied == {
         ('1', 'a', 'x'): 'satisfied naturally',
         ('1', 'b', 'x'): False,
@@ -212,10 +209,7 @@ def test_satisfy_me():
     # should have reset cached satisfaction state
     assert prereq._cached_satisfied is None
 
-    prereq.satisfy_me(
-        [Tokens('//1/a:x'), Tokens('//1/b:x')],
-        forced=True,
-    )
+    prereq.satisfy_me(('1', 'a', 'x'), ('1', 'b', 'x'))
     assert prereq._satisfied == {
         # 1/a:x unaffected as already satisfied
         ('1', 'a', 'x'): 'satisfied naturally',
@@ -224,27 +218,25 @@ def test_satisfy_me():
     }
 
 
-@pytest.mark.parametrize('forced, mode, expected', [
-    (False, None, 'satisfied naturally'),
-    (True, None, 'force satisfied'),
-    (True, RunMode.SKIP, 'force satisfied'),
-    (False, RunMode.SKIP, 'satisfied by skip mode'),
+@pytest.mark.parametrize('mode, expected', [
+    (None, 'satisfied naturally'),
+    (None, 'force satisfied'),
+    (RunMode.SKIP, 'force satisfied'),
+    (RunMode.SKIP, 'satisfied by skip mode'),
 ])
 def test_satisfy_me__override_false(
-    forced: bool,
-    mode: Optional[RunMode],
+    mode: RunMode | None,
     expected: SatisfiedState,
 ):
     """Test satisfying an unsatisfied prereq with different states."""
     prereq = Prerequisite(IntegerPoint('2'))
     prereq[('1', 'a', 'x')] = False
 
-    prereq.satisfy_me([Tokens('//1/a:x')], forced=forced, mode=mode)
+    prereq.satisfy_me(('1', 'a', 'x'), mode=mode)
     assert prereq[('1', 'a', 'x')] == expected
 
 
 @pytest.mark.parametrize('mode', [None, RunMode.SKIP])
-@pytest.mark.parametrize('forced', [True, False])
 @pytest.mark.parametrize('existing', [
     'satisfied from database',
     'force satisfied',
@@ -252,14 +244,13 @@ def test_satisfy_me__override_false(
 ])
 def test_satisfy_me__override_truthy(
     existing: SatisfiedState,
-    forced: bool,
-    mode: Optional[RunMode],
+    mode: RunMode | None,
 ):
     """Test that satisfying an already-satisfied prereq doesn't change it."""
     prereq = Prerequisite(IntegerPoint('2'))
     prereq[('1', 'a', 'x')] = existing
 
-    prereq.satisfy_me([Tokens('//1/a:x')], forced=forced, mode=mode)
+    prereq.satisfy_me(('1', 'a', 'x'), mode=mode)
     assert prereq[('1', 'a', 'x')] == existing
 
 

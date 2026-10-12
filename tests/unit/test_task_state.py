@@ -15,24 +15,37 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from unittest.mock import MagicMock
-import pytest
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
+import pytest
+
+from cylc.flow.cycling.integer import (
+    IntegerPoint,
+    IntegerSequence,
+)
+from cylc.flow.cycling.loader import INTEGER_CYCLING_TYPE
 from cylc.flow.prerequisite import Prerequisite
-from cylc.flow.taskdef import TaskDef
-from cylc.flow.cycling.integer import IntegerSequence, IntegerPoint
-from cylc.flow.run_modes import RunMode, disable_task_event_handlers
-from cylc.flow.task_trigger import Dependency, TaskTrigger
+from cylc.flow.run_modes import (
+    RunMode,
+    disable_task_event_handlers,
+)
 from cylc.flow.task_state import (
-    TaskState,
+    TASK_STATUS_FAILED,
     TASK_STATUS_PREPARING,
+    TASK_STATUS_RUNNING,
     TASK_STATUS_SUBMIT_FAILED,
     TASK_STATUS_SUBMITTED,
     TASK_STATUS_SUCCEEDED,
     TASK_STATUS_WAITING,
-    TASK_STATUS_RUNNING,
+    TaskState,
+    extract_group_state,
 )
+from cylc.flow.task_trigger import (
+    Dependency,
+    TaskTrigger,
+)
+from cylc.flow.taskdef import TaskDef
 
 
 @pytest.mark.parametrize(
@@ -125,6 +138,21 @@ def test_task_state_order():
     assert not tstate.is_gte(TASK_STATUS_RUNNING)
 
 
+@pytest.mark.parametrize("child_states, expected", [
+    ([], None),
+    (
+        [TASK_STATUS_SUBMIT_FAILED, TASK_STATUS_FAILED],
+        TASK_STATUS_SUBMIT_FAILED
+    ),
+    (
+        ["Who?", TASK_STATUS_FAILED],
+        TASK_STATUS_FAILED
+    )
+])
+def test_extract_group_state_order(child_states, expected):
+    assert extract_group_state(child_states) == expected
+
+
 def test_get_resolved_dependencies():
     prereq1 = Prerequisite(IntegerPoint('2'))
     prereq1[('1', 'a', 'x')] = True
@@ -144,6 +172,88 @@ def test_get_resolved_dependencies():
         '1/d',
         '1/e',
     ]
+
+
+@pytest.mark.parametrize('values, expected', [
+    ({}, True),
+    ({'a': True, 'b': True}, True),
+    ({'a': True, 'b': False}, False),
+])
+@pytest.mark.parametrize('attr', ['xtriggers', 'external_triggers'])
+def test_xtriggers_all_satisfied(attr, values, expected):
+    """Check the xtriggers and external_triggers all_satisfied methods."""
+    task_state = TaskState(
+        MagicMock(), IntegerPoint('1'), TASK_STATUS_WAITING, is_held=False
+    )
+    setattr(task_state, attr, values)
+    assert getattr(task_state, f'{attr}_all_satisfied')() is expected
+
+
+@pytest.mark.parametrize('satisfied, expected', [
+    ([], True),
+    ([True, True], True),
+    ([True, False], False),
+])
+@pytest.mark.parametrize('attr', ['prerequisites', 'suicide_prerequisites'])
+def test_prerequisites_all_satisfied(attr, satisfied, expected):
+    """Check the prerequisites and suicide_prerequisites all_satisfied
+    methods."""
+    task_state = TaskState(
+        MagicMock(), IntegerPoint('2'), TASK_STATUS_WAITING, is_held=False
+    )
+    setattr(task_state, attr, prereqs := [])
+    for i, result in enumerate(satisfied):
+        prereq = Prerequisite(IntegerPoint('2'))
+        prereq[('1', f'a{i}', 'x')] = result
+        prereqs.append(prereq)
+
+    assert getattr(task_state, f'{attr}_all_satisfied')() is expected
+
+
+def test_get_prerequisite_target_points(set_cycling_type):
+    set_cycling_type(INTEGER_CYCLING_TYPE)
+    this_point = IntegerPoint('2')
+    task_state = TaskState(
+        MagicMock(), this_point, TASK_STATUS_WAITING, is_held=False
+    )
+    prereq = Prerequisite(this_point)
+    prereq[('1', 'a', 'x')] = True
+    prereq[('2', 'a', 'x')] = False
+    duplicate_prereq = Prerequisite(this_point)
+    duplicate_prereq[('1', 'a', 'x')] = True
+    task_state.prerequisites = [prereq, duplicate_prereq]
+    # Note that suicide prereqs don't count
+    suicide_prereq = Prerequisite(this_point)
+    suicide_prereq[('3', 'a', 'x')] = True
+    task_state.suicide_prerequisites = [suicide_prereq]
+
+    assert task_state.get_prerequisite_target_points() == {
+        IntegerPoint('1'),
+        IntegerPoint('2'),
+    }
+
+
+def test_iter_unsatisfied_prerequisites():
+    this_point = IntegerPoint('2')
+    task_state = TaskState(
+        MagicMock(), this_point, TASK_STATUS_WAITING, is_held=False
+    )
+    prereq1 = Prerequisite(this_point)
+    prereq1[('1', 'a', 'x')] = True
+    prereq1[('2', 'a', 'x')] = False
+    prereq2 = Prerequisite(this_point)
+    prereq2[('3', 'b', 'x')] = True
+    prereq2[('3', 'c', 'x')] = False
+    task_state.prerequisites = [prereq1, prereq2]
+    # Note that suicide prereqs don't count
+    suicide_prereq = Prerequisite(this_point)
+    suicide_prereq[('4', 'a', 'x')] = True
+    task_state.suicide_prerequisites = [suicide_prereq]
+
+    assert set(task_state.iter_unsatisfied_prerequisites()) == {
+        ('2', 'a', 'x'),
+        ('3', 'c', 'x'),
+    }
 
 
 @pytest.mark.parametrize(

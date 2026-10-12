@@ -22,8 +22,6 @@ from typing import (
     TYPE_CHECKING,
     Dict,
     ItemsView,
-    Iterable,
-    Iterator,
     KeysView,
     Literal,
     NamedTuple,
@@ -43,8 +41,9 @@ from cylc.flow.run_modes import RunMode
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from cylc.flow.cycling import PointBase
-    from cylc.flow.id import Tokens
 
 
 AnyPrereqTuple = Tuple[Union['PointBase', str, int], str, str]
@@ -54,7 +53,7 @@ class PrereqTuple(NamedTuple):
     """A task output in a Prerequisite."""
     point: str
     task: str
-    output: str
+    output: str  # message, not label
 
     def get_id(self, show_output=False) -> str:
         """Get the relative ID of the task in this prereq output."""
@@ -169,7 +168,7 @@ class Prerequisite:
             # Force later recalculation of cached satisfaction state:
             self._cached_satisfied = None
 
-    def __iter__(self) -> Iterator[PrereqTuple]:
+    def __iter__(self) -> 'Iterator[PrereqTuple]':
         return iter(self._satisfied)
 
     def items(self) -> ItemsView[PrereqTuple, SatisfiedState]:
@@ -275,31 +274,25 @@ class Prerequisite:
 
     def satisfy_me(
         self,
-        outputs: Iterable['Tokens'],
+        *outputs: AnyPrereqTuple,
         mode: RunMode | None = None,
-        forced: bool = False,
     ) -> bool:
         """Set the given outputs as satisfied (if they are not already).
 
         Args:
-            outputs: List of outputs to satisfy.
+            outputs: Outputs to satisfy.
             mode: Task run mode.
-            forced: If True, records that this should not be undone by
-                `cylc remove`.
 
         Returns True if any outputs were newly satisfied.
         """
         ret = False
-        for output in outputs:
-            output_tuple = PrereqTuple(
-                output['cycle'], output['task'], output['task_sel']
-            )
+        for output_tuple in outputs:
+            output_tuple = PrereqTuple.coerce(output_tuple)
             if output_tuple not in self._satisfied:
                 continue
             if not self._satisfied[output_tuple]:
                 self[output_tuple] = (
-                    'force satisfied' if forced
-                    else 'satisfied by skip mode' if mode == RunMode.SKIP
+                    'satisfied by skip mode' if mode == RunMode.SKIP
                     else 'satisfied naturally'
                 )
                 ret = True
@@ -339,7 +332,7 @@ class Prerequisite:
             expression=expr,
             satisfied=self.is_satisfied(),
             conditions=conds,
-            cycle_points=sorted(self.iter_target_point_strings()),
+            cycle_points=sorted(self._iter_target_point_strings()),
         )
 
     def set_satisfied(self) -> None:
@@ -356,17 +349,16 @@ class Prerequisite:
         else:
             self._cached_satisfied = True
 
-    def iter_target_point_strings(self):
+    def _iter_target_point_strings(self) -> 'Iterator[str]':
         yield from {
             task_output.point for task_output in self._satisfied
         }
 
-    def get_target_points(self):
-        """Return a list of cycle points target by each prerequisite,
+    def iter_target_points(self) -> 'Iterator[PointBase]':
+        """Yield each prereq target cycle point,
         including each component of conditionals."""
-        return [
-            get_point(p) for p in self.iter_target_point_strings()
-        ]
+        for p in self._iter_target_point_strings():
+            yield get_point(p)
 
     def unset_naturally_satisfied(self, id_: str) -> bool:
         """Set the dependencies with matching task IDs to unsatisfied only if

@@ -126,8 +126,8 @@ from cylc.flow.task_state import (
     TASK_STATUS_WAITING,
     TASK_STATUSES_FINAL,
     TASK_STATUSES_ORDERED,
+    extract_group_state,
 )
-from cylc.flow.task_state_prop import extract_group_state
 from cylc.flow.taskdef import (
     generate_graph_children,
     generate_graph_parents,

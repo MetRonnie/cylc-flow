@@ -179,11 +179,11 @@ async def test_unset_prereq(example_workflow, scheduler, start):
                 TASK_OUTPUT_SUCCEEDED,
             )
         b = schd.pool.get_task(IntegerPoint('1'), 'b')
-        assert b.prereqs_are_satisfied()
+        assert b.state.prerequisites_all_satisfied()
 
         await run_cmd(remove_tasks(schd, ['1/a1'], []))
 
-        assert not b.prereqs_are_satisfied()
+        assert not b.state.prerequisites_all_satisfied()
 
 
 async def test_not_unset_prereq(

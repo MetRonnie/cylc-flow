@@ -1419,7 +1419,7 @@ async def test_prereq_satisfaction(
 
         b = schd.pool.get_task(IntegerPoint("1"), "b")
 
-        assert not b.prereqs_are_satisfied()
+        assert not b.state.prerequisites_all_satisfied()
 
         # set valid and invalid prerequisites, by label and message.
         schd.pool.set_prereqs_and_outputs(
@@ -1433,7 +1433,7 @@ async def test_prereq_satisfaction(
         # FIXME: testing that something is *not* logged is extremely fragile:
         assert not log_filter(regex='.*does not depend on.*')
 
-        assert b.prereqs_are_satisfied()
+        assert b.state.prerequisites_all_satisfied()
 
 
 @pytest.mark.parametrize('cycling_mode', ['integer', 'datetime'])

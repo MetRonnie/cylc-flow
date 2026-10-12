@@ -22,11 +22,9 @@ from typing import (
     TYPE_CHECKING,
     Dict,
     Iterable,
-    Iterator,
     List,
     Literal,
     Optional,
-    Tuple,
     Union,
 )
 
@@ -39,6 +37,8 @@ from cylc.flow.util import (
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from cylc.flow.taskdef import TaskDef
 
 
@@ -369,8 +369,8 @@ class TaskOutputs:
         return self._message_to_trigger[message]
 
     def set_trigger_complete(
-        self, trigger: str, forced=False
-    ) -> Optional[bool]:
+        self, trigger: str, forced: bool = False
+    ) -> bool | None:
         """Set the provided output trigger as complete.
 
         Args:
@@ -386,10 +386,10 @@ class TaskOutputs:
                 If the output does not apply.
 
         """
-        trg_to_msg = {
-            v: k for k, v in self._message_to_trigger.items()
-        }
-        return self.set_message_complete(trg_to_msg[trigger], forced)
+        for message, trg in self._message_to_trigger.items():
+            if trg == trigger:
+                return self.set_message_complete(message, forced)
+        return None
 
     def set_message_complete(
         self, message: str, forced=False
@@ -449,14 +449,14 @@ class TaskOutputs:
             if is_completed
         }
 
-    def __iter__(self) -> Iterator[Tuple[str, str, bool]]:
+    def __iter__(self) -> 'Iterator[tuple[str, str, bool]]':
         """A generator that yields all outputs.
 
         Yields:
             (trigger, message, is_complete)
 
             trigger:
-                The output trigger.
+                The output trigger (label).
             message:
                 The output message.
             is_complete:
@@ -636,8 +636,8 @@ class TaskOutputs:
 
     def iter_required_messages(
         self,
-        disable: 'Optional[Literal["succeeded", "failed"]]' = None
-    ) -> Iterator[str]:
+        disable: Literal["succeeded", "failed"] | None = None
+    ) -> 'Iterator[str]':
         """Yield task messages that are required for this task to be complete.
 
         Note, in some cases tasks might not have any required messages,

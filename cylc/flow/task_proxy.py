@@ -19,6 +19,7 @@
 
 from collections import Counter
 from fnmatch import fnmatchcase
+from itertools import chain
 from time import time
 from typing import (
     TYPE_CHECKING,
@@ -55,8 +56,12 @@ from cylc.flow.wallclock import get_unix_time_from_time_string as str2time
 if TYPE_CHECKING:
     from cylc.flow.cycling import PointBase
     from cylc.flow.flow_mgr import FlowNums
-    from cylc.flow.id import Tokens, TaskTokens
+    from cylc.flow.id import (
+        TaskTokens,
+        Tokens,
+    )
     from cylc.flow.prerequisite import (
+        AnyPrereqTuple,
         PrereqTuple,
         SatisfiedState,
     )
@@ -486,7 +491,7 @@ class TaskProxy:
             return self.try_timers[self.state.status].is_delay_done()
         return (
             self.state(TASK_STATUS_WAITING)
-            and self.prereqs_are_satisfied()
+            and self.state.prerequisites_all_satisfied()
             and self.state.external_triggers_all_satisfied()
             and self.state.xtriggers_all_satisfied()
         )
@@ -501,10 +506,6 @@ class TaskProxy:
         else:
             self.summary[event_key + '_time'] = float(str2time(time_str))
         self.summary[event_key + '_time_string'] = time_str
-
-    def prereqs_are_satisfied(self) -> bool:
-        """Are all task prerequisites satisfied?"""
-        return all(pre.is_satisfied() for pre in self.state.prerequisites)
 
     def reset_try_timers(self):
         # unset any retry delay timers
@@ -570,24 +571,26 @@ class TaskProxy:
 
         return False
 
-    def satisfy_me(
+    def satisfy_prereqs(
         self,
-        task_messages: 'Iterable[Tokens]',
+        *outputs: 'AnyPrereqTuple',
         mode: RunMode | None = RunMode.LIVE,
     ) -> None:
-        """Try to satisfy my prerequisites with given task output messages.
+        """Try to satisfy my prerequisites and suicide prerequisites with
+        given task output messages.
 
-        Output format: "cycle/task:message"
-
+        Args:
+            outputs: Point, name and output messages of the prerequisite task.
+            mode: The run mode of prerequisite task.
         """
-        for prereq in (
-            *self.state.prerequisites, *self.state.suicide_prerequisites
+        for prereq in chain(
+            self.state.prerequisites, self.state.suicide_prerequisites
         ):
-            if prereq.satisfy_me(task_messages, mode=mode):
+            if prereq.satisfy_me(*outputs, mode=mode):
                 # Signal to main loop that the task may need runahead release:
                 self.state.is_updated = True
 
-    def force_satisfy(
+    def force_satisfy_prereqs(
         self, prereqs: 'Iterable[PrereqTuple]', set_all: bool = False
     ) -> None:
         """Force satisfy given task prerequisites.
@@ -627,7 +630,3 @@ class TaskProxy:
         ):
             return False
         return True
-
-    def is_complete(self) -> bool:
-        """Return True if complete or expired."""
-        return self.state.outputs.is_complete()

@@ -145,13 +145,16 @@ def test_is_ready_to_run_conditions(
 ):
     """Test the final return with various combinations of conditions."""
     mock_itask = Mock(
-        state=Mock(is_held=False, status='waiting'),
+        state=Mock(
+            return_value=is_waiting,
+            is_held=False,
+            status='waiting',
+            prerequisites_all_satisfied=Mock(return_value=prereqs),
+            external_triggers_all_satisfied=Mock(return_value=ext_trigs),
+            xtriggers_all_satisfied=Mock(return_value=xtrigs),
+        ),
         try_timers={},
     )
-    mock_itask.state.return_value = is_waiting
-    mock_itask.prereqs_are_satisfied = Mock(return_value=prereqs)
-    mock_itask.state.external_triggers_all_satisfied.return_value = ext_trigs
-    mock_itask.state.xtriggers_all_satisfied.return_value = xtrigs
     assert TaskProxy.is_ready_to_run(mock_itask) is expected
 
 

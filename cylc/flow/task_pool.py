@@ -57,6 +57,7 @@ from cylc.flow.platforms import get_platform
 from cylc.flow.prerequisite import PrereqTuple
 from cylc.flow.run_modes import RunMode
 from cylc.flow.run_modes.skip import process_outputs as get_skip_mode_outputs
+from cylc.flow.scripts.set import XTRIGGER_PREREQ_PREFIX
 from cylc.flow.task_action_timer import (
     TaskActionTimer,
     TimerFlags,
@@ -89,7 +90,7 @@ from cylc.flow.task_state import (
 )
 from cylc.flow.task_trigger import TaskTrigger
 from cylc.flow.util import deserialise_set
-from cylc.flow.scripts.set import XTRIGGER_PREREQ_PREFIX
+
 
 if TYPE_CHECKING:
     from cylc.flow.config import WorkflowConfig
@@ -102,7 +103,9 @@ if TYPE_CHECKING:
         FlowMgr,
         FlowNums,
     )
-    from cylc.flow.prerequisite import SatisfiedState
+    from cylc.flow.prerequisite import (
+        SatisfiedState,
+    )
     from cylc.flow.task_events_mgr import TaskEventsManager
     from cylc.flow.taskdef import TaskDef
     from cylc.flow.workflow_db_mgr import WorkflowDatabaseManager
@@ -193,7 +196,8 @@ class TaskPool:
         self.tasks_removed = False
 
         self.hold_point: Optional['PointBase'] = None
-        self.abs_outputs_done: Set[Tuple[str, str, str]] = set()
+        # Absolute outputs that have been completed
+        self.abs_outputs_done: set[PrereqTuple] = set()
 
         self.stop_task_id: Optional[str] = None
         self.stop_task_finished = False
@@ -492,8 +496,7 @@ class TaskPool:
         self.flow_mgr.load_from_db(flow_nums_seen)
 
     def load_abs_outputs_for_restart(self, row_idx, row):
-        cycle, name, output = row
-        self.abs_outputs_done.add((cycle, name, output))
+        self.abs_outputs_done.add(row)
 
     def check_task_output(
         self,
@@ -1232,7 +1235,7 @@ class TaskPool:
             task_point = itask.point
             if self.stop_point and task_point > self.stop_point:
                 continue
-            for pr in itask.state.get_unsatisfied_prerequisites():
+            for pr in itask.state.iter_unsatisfied_prerequisites():
                 if self.stop_point and get_point(pr.point) > self.stop_point:
                     continue
                 if itask.identity not in unsat:
@@ -1268,7 +1271,7 @@ class TaskPool:
                 itask.state(TASK_STATUS_WAITING)
                 and not itask.state.is_runahead
                 # (avoid waiting pre-spawned absolute-triggered tasks:)
-                and itask.prereqs_are_satisfied()
+                and itask.state.prerequisites_all_satisfied()
             ) for itask in self.get_tasks()
         ):
             return False
@@ -1363,7 +1366,7 @@ class TaskPool:
         """
         return self.abort_task_failed
 
-    def spawn_on_output(self, itask: TaskProxy, output: str) -> None:
+    def spawn_on_output(self, itask: TaskProxy, message: str) -> None:
         """Spawn child-tasks of given output, into the pool.
 
         Remove the parent task from the pool if complete.
@@ -1383,11 +1386,11 @@ class TaskPool:
         outputs to satisfy any tasks with absolute prerequisites).
 
         Args:
-            output: output to spawn on.
+            message: output message to spawn on.
 
         """
         if (
-            output == TASK_OUTPUT_FAILED
+            message == TASK_OUTPUT_FAILED
             and self.expected_failed_tasks is not None
             and itask.identity not in self.expected_failed_tasks
         ):
@@ -1396,12 +1399,12 @@ class TaskPool:
         children = []
         if itask.flow_nums:
             with suppress(KeyError):
-                children = itask.graph_children[output]
+                children = itask.graph_children[message]
 
         if itask.flow_wait and children:
             LOG.warning(
-                f"[{itask}] not spawning on {output}: flow wait requested")
-            self.remove_if_complete(itask, output)
+                f"[{itask}] not spawning on {message}: flow wait requested")
+            self.remove_if_complete(itask, message)
             return
 
         if status_geq(itask.state.status, TASK_STATUS_PREPARING):
@@ -1411,14 +1414,17 @@ class TaskPool:
         suicide = []
         for c_name, c_point, is_abs in children:
             if is_abs:
-                self.abs_outputs_done.add(
-                    (str(itask.point), itask.tdef.name, output))
-                self.workflow_db_mgr.put_insert_abs_output(
-                    str(itask.point), itask.tdef.name, output)
+                prereq_tuple = PrereqTuple.coerce((
+                    itask.point,
+                    itask.tdef.name,
+                    message,
+                ))
+                self.abs_outputs_done.add(prereq_tuple)
+                self.workflow_db_mgr.put_insert_abs_output(*prereq_tuple)
                 self.workflow_db_mgr.process_queued_ops()
 
             c_task = self._get_task_by_id(quick_relative_id(c_point, c_name))
-            in_pool = c_task is not None
+            c_task_in_pool = c_task is not None
 
             if c_task is not None and c_task != itask:
                 # (Avoid self-suicide: A => !A)
@@ -1429,7 +1435,7 @@ class TaskPool:
                 # for an upcoming flow merge before spawning ... then spawn it.
                 c_task = self.spawn_task(c_name, c_point, itask.flow_nums)
 
-            tasks: List[TaskProxy]
+            c_tasks: list[TaskProxy]
             if c_task is not None:
                 # Have child task, update its prerequisites.
                 if is_abs:
@@ -1442,19 +1448,19 @@ class TaskPool:
                         {TaskTokens(cycle='*', task=c_name)},
                         only_match_pool=True,
                     )
-                    tasks = self.get_itasks(matched)
-                    if c_task not in tasks:
-                        tasks.append(c_task)
+                    c_tasks = self.get_itasks(matched)
+                    if c_task not in c_tasks:
+                        c_tasks.append(c_task)
                 else:
-                    tasks = [c_task]
+                    c_tasks = [c_task]
 
-                for t in tasks:
-                    t.satisfy_me(
-                        [itask.tokens.duplicate(task_sel=output)],
+                for t in c_tasks:
+                    t.satisfy_prereqs(
+                        (itask.point, itask.tdef.name, message),
                         mode=itask.run_mode
                     )
                     self.data_store_mgr.delta_task_prerequisite(t)
-                    if not in_pool:
+                    if not c_task_in_pool:
                         self.add_to_pool(t)
 
                     # Event-driven suicide.
@@ -1478,7 +1484,7 @@ class TaskPool:
             # See https://github.com/cylc/cylc-flow/issues/6066
             self.workflow_db_mgr.process_queued_ops()
 
-        self.remove_if_complete(itask, output)
+        self.remove_if_complete(itask, message)
 
     def remove_if_complete(
         self, itask: TaskProxy, output: Optional[str] = None
@@ -1527,7 +1533,7 @@ class TaskPool:
         if not itask.flow_nums:
             return
 
-        for _, message, is_completed in itask.state.outputs:
+        for _label, message, is_completed in itask.state.outputs:
             if not is_completed:
                 continue
             try:
@@ -1549,8 +1555,8 @@ class TaskPool:
                 if c_task is None:
                     # not spawnable
                     continue
-                c_task.satisfy_me(
-                    [itask.tokens.duplicate(task_sel=message)],
+                c_task.satisfy_prereqs(
+                    (itask.point, itask.tdef.name, message),
                     mode=itask.run_mode
                 )
                 self.data_store_mgr.delta_task_prerequisite(c_task)
@@ -1605,15 +1611,13 @@ class TaskPool:
            If no matching history, status will be None
 
         """
-        submit_num: int = 0
-        status: Optional[str] = None
+        status: str | None = None
         flow_wait = False
 
         info = self.workflow_db_mgr.pri_dao.select_prev_instances(
             name, str(point)
         )
-        with suppress(ValueError):
-            submit_num = max(s[0] for s in info)
+        submit_num = max((s[0] for s in info), default=0)
 
         for _snum, f_wait, old_fnums, old_status in info:
             if set.intersection(flow_nums, old_fnums):
@@ -1741,7 +1745,7 @@ class TaskPool:
 
         if prev_status in TASK_STATUSES_FINAL:
             # Task finished previously.
-            if itask.is_complete():
+            if itask.state.outputs.is_complete():
                 msg = "and completed"
                 itask.transient = True
             else:
@@ -1780,7 +1784,7 @@ class TaskPool:
             # Here, in the final cycle bar wants to spawn baz, but that would
             # stall because baz also depends on foo after the final point.
             if self.stop_point and itask.point <= self.stop_point:
-                for pct in itask.state.prerequisites_get_target_points():
+                for pct in itask.state.get_prerequisite_target_points():
                     if pct > self.stop_point:
                         LOG.warning(
                             f"[{itask}] not spawned: a prerequisite is beyond"
@@ -1789,14 +1793,11 @@ class TaskPool:
                         return None
 
             # Satisfy any absolute triggers.
-            if (
-                itask.tdef.has_abs_triggers
-                and itask.state.prerequisites_are_not_all_satisfied()
+            if itask.tdef.has_abs_triggers and (
+                not itask.state.prerequisites_all_satisfied()
+                or not itask.state.suicide_prerequisites_all_satisfied()
             ):
-                itask.satisfy_me([
-                    Tokens(cycle=cycle, task=task, task_sel=output)
-                    for cycle, task, output in self.abs_outputs_done
-                ])
+                itask.satisfy_prereqs(*self.abs_outputs_done)
 
         if prev_status is None:
             # only add new flow rows if this task has not run before
@@ -2188,7 +2189,7 @@ class TaskPool:
         Designated flows should already be merged to the task proxy.
         """
         # task prerequisites
-        itask.force_satisfy(prereqs, set_all)
+        itask.force_satisfy_prereqs(prereqs, set_all)
         # xtriggers, including "all"
         self.xtrigger_mgr.force_satisfy(itask, xtrigs)
 

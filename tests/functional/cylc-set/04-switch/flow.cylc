@@ -22,10 +22,10 @@
            cylc__job__poll_grep_workflow_log "actioned"
         """
     [[foo]]
-        script = "cylc message b"  # always go b-way if I run
+        script = "cylc message bravo"  # always go b-way if I run
         [[[outputs]]]
-             a = a
-             b = b
+            a = alpha
+            b = bravo
     [[a]]
     [[b]]
         script = false
