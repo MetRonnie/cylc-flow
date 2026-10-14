@@ -210,7 +210,7 @@ class upgrader:
         return exp_upgs
 
     def upgrade(self):
-        warnings = OrderedDict()
+        warnings: dict[str, list[str]] = {}
         deprecations = False
         obsoletions = False
         for vn, upgs in self.upgrades.items():
@@ -245,8 +245,7 @@ class upgrader:
                             else:
                                 msg += (f' - this will fail validation in '
                                         f'Cylc {remove_at}')
-                        warnings.setdefault(vn, [])
-                        warnings[vn].append(msg)
+                        warnings.setdefault(vn, []).append(msg)
                         self.del_item(upg['old'])
                         if upg['new']:
                             # check self.cfg does not already contain a
