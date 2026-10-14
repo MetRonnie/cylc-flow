@@ -274,7 +274,7 @@ class upgrader:
 
                 # BACK COMPAT: In Cylc 8.8 display Errors for
                 # deprecations but allow workflow to run and be upgraded
-                # remove after: 8.9 has workflows failing to validate
+                # remove at: 8.9
                 if upg.get('remove_at') == '8.9':
                     level = ERROR
                 else:
