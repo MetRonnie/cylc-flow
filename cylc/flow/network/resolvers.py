@@ -40,7 +40,7 @@ from uuid import uuid4
 from graphene.utils.str_converters import to_snake_case
 
 from cylc.flow import LOG
-from cylc.flow.commands import COMMANDS
+from cylc.flow.commands import COMMANDS, stop
 from cylc.flow.data_store_mgr import (
     EDGES, FAMILY_PROXIES, TASK_PROXIES, WORKFLOW,
     DELTA_ADDED, create_delta_store
@@ -56,6 +56,7 @@ from cylc.flow.network.schema import (
     sort_elements,
 )
 from cylc.flow.util import uniq, iter_uniq
+from cylc.flow.workflow_status import StopMode
 
 if TYPE_CHECKING:
     from enum import Enum
@@ -750,6 +751,13 @@ class Resolvers(BaseResolvers):
         # Queue the command to the scheduler, with a unique command ID
         cmd_uuid = str(uuid4())
         LOG.info(f"{received_msg} ID={cmd_uuid}\n{signature_str}")
+
+        if meth is stop and (
+            kwargs['mode'].value == StopMode.REQUEST_NOW_NOW.value
+            and (task := self.schd.current_command_queue_task)
+        ):
+            task.get_loop().call_soon_threadsafe(task.cancel)
+
         self.schd.command_queue.put(
             (
                 cmd_uuid,

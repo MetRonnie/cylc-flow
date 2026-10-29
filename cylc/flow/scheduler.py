@@ -287,6 +287,7 @@ class Scheduler:
     is_reloaded = False
 
     # main loop
+    current_command_queue_task: asyncio.Task | None = None
     main_loop_intervals: deque = deque(maxlen=10)
     main_loop_plugins: Optional[dict] = None
     auto_restart_mode: Optional[AutoRestartMode] = None
@@ -1200,8 +1201,12 @@ class Scheduler:
             try:
                 n_warnings: int = 0
                 with suppress(StopAsyncIteration):
-                    n_warnings = await cmd.__anext__()
-            except Exception as exc:
+                    self.current_command_queue_task = asyncio.create_task(
+                        cmd.__anext__(),
+                        name=f"{name}-{uuid}",
+                    )
+                    n_warnings = await self.current_command_queue_task
+            except (Exception, asyncio.CancelledError) as exc:
                 # Don't let a bad command bring the workflow down.
                 exc_info = exc if (
                     cylc.flow.flags.verbosity > 1 or
@@ -1221,8 +1226,9 @@ class Scheduler:
                 else:
                     LOG.info(msg.format(result="actioned"))
                 self.is_updated = True
-
-            self.command_queue.task_done()
+            finally:
+                self.current_command_queue_task = None
+                self.command_queue.task_done()
 
     def _set_stop(self, stop_mode: Optional[StopMode] = None) -> None:
         """Set shutdown mode."""
@@ -1834,6 +1840,7 @@ class Scheduler:
         if self.incomplete_ri_map:
             self.manage_remote_init()
 
+        LOG.info("main loop")
         await self.process_command_queue()
         self.proc_pool.process()
 

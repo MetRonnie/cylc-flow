@@ -53,6 +53,7 @@ For more info see: https://github.com/cylc/cylc-flow/issues/3329
 
 """
 
+import asyncio
 from contextlib import suppress
 import itertools
 from time import (
@@ -326,6 +327,8 @@ async def set_prereqs_and_outputs(
     ids = validate.is_tasks(tasks)
 
     yield
+    # Faking really long running command:
+    await asyncio.sleep(60)
 
     if outputs is None:
         outputs = []
