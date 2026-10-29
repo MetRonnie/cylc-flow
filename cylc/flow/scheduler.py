@@ -43,7 +43,6 @@ from time import (
     sleep,
     time,
 )
-import traceback
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -227,7 +226,7 @@ class Scheduler:
     workflow: str
     owner: str
     host: str
-    id: str  # noqa: A003 (instance attr not local)
+    id: str
     uuid_str: str
     is_restart: bool
     bad_hosts: Set[str]
@@ -252,8 +251,8 @@ class Scheduler:
     flow_mgr: FlowMgr
 
     # queues
-    command_queue: 'Queue[Tuple[str, str, AsyncGenerator]]'
-    message_queue: 'Queue[TaskMsg]'
+    command_queue: Queue[tuple[str, str, AsyncGenerator]]
+    message_queue: Queue[TaskMsg]
     ext_trigger_queue: Queue
 
     # configuration
@@ -934,7 +933,7 @@ class Scheduler:
         missing_orphan_platform_names: set[str] = set()
 
         # active tasks removed by restart which *can* and *should* be killed
-        orphans_to_kill: 'list[TaskProxy]' = []
+        orphans_to_kill: list[TaskProxy] = []
 
         for (
             cycle,
@@ -1006,7 +1005,7 @@ class Scheduler:
 
     def handle_graph_change(
         self,
-        cause: Literal['reload'] | Literal['restart'],
+        cause: Literal['reload', 'restart'],
         orphan_itasks: 'Iterable[TaskProxy]',
         added_tasks: 'Collection[str] | None' = None,
     ) -> None:
@@ -1192,32 +1191,25 @@ class Scheduler:
 
     async def process_command_queue(self) -> None:
         """Process queued commands."""
-        qsize = self.command_queue.qsize()
-        if qsize <= 0:
-            return
-        LOG.debug(f"Processing {qsize} queued command(s)")
         while True:
-            uuid: str
-            name: str
-            cmd: AsyncGenerator
             try:
                 uuid, name, cmd = self.command_queue.get(False)
             except Empty:
                 break
             msg = f'Command "{name}" ' + '{result}' + f'. ID={uuid}'
             try:
-                n_warnings: Optional[int] = None
+                n_warnings: int = 0
                 with suppress(StopAsyncIteration):
                     n_warnings = await cmd.__anext__()
             except Exception as exc:
                 # Don't let a bad command bring the workflow down.
-                if (
+                exc_info = exc if (
                     cylc.flow.flags.verbosity > 1 or
                     not isinstance(exc, CommandFailedError)
-                ):
-                    LOG.error(traceback.format_exc())
+                ) else None
                 LOG.error(
-                    msg.format(result="failed") + f"\n{exc}"
+                    msg.format(result="failed") + f"\n{exc}",
+                    exc_info=exc_info,
                 )
             else:
                 if n_warnings:
@@ -1525,7 +1517,7 @@ class Scheduler:
             submission).
 
         """
-        pre_prep_tasks: Set['TaskProxy'] = set()
+        pre_prep_tasks: Set[TaskProxy] = set()
         if (
             not self.stop_mode
             and self.auto_restart_time is None

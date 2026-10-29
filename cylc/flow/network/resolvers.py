@@ -692,8 +692,8 @@ class Resolvers(BaseResolvers):
         return [{'id': w_id, 'response': result}]
 
     async def _mutation_mapper(
-        self, command: str, kwargs: Dict[str, Any], meta: Dict[str, Any]
-    ) -> Tuple[bool, str]:
+        self, command: str, kwargs: dict[str, Any], meta: dict[str, Any]
+    ) -> tuple[bool, str]:
         """Map to internal command interface.
 
         Some direct methods are in this module.
@@ -741,9 +741,10 @@ class Resolvers(BaseResolvers):
         except Exception as exc:
             # NOTE: keep this exception vague to prevent a bad command taking
             # down the scheduler
-            LOG.warning(f'{received_msg}\n{exc.__class__.__name__}: {exc}')
-            if cylc.flow.flags.verbosity > 1:
-                LOG.exception(exc)  # log full traceback in debug mode
+            LOG.warning(
+                f'{received_msg}\n{exc.__class__.__name__}: {exc}',
+                exc_info=(exc if cylc.flow.flags.verbosity > 1 else None),
+            )
             return (False, str(exc))
 
         # Queue the command to the scheduler, with a unique command ID
